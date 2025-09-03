@@ -144,7 +144,7 @@ class PlanningAgentCommunityAiUser:
 
         self.logger.info(f"---等待LLM返回... ...\n{messages}")
         try:
-            response = await self.enhance_llm.llm._whoami_text(messages=messages, timeout=30,use_tool=True)
+            response = await self.enhance_llm.llm._whoami_text(messages=messages, timeout=360,use_tool=True)
             if not response:
                raise Exception("工具调用模块返回为空")
             self.logger.info(f"---LLM返回... ...\n{response}")

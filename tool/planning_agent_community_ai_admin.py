@@ -245,44 +245,44 @@ class PlanningAgentCommunityAiAdmin:
 
 
 
-if __name__ == '__main__':
-    from ..llm_api.ollama_llm import OllamaLLM
-    from ..config.llm_config import LLMConfig
-    from ..tool.direct_llm_community_ai_admin import DirectLLMCommunityAiAdmin
-    from ..tool.direct_llm_community_ai_user import DirectLLMCommunityAiUser
-    from ..tool.google_search import GoogleSearch
-    from ..tool.weather_api import WeatherApi
-    from ..tool.retrieval import Retrieval
-    from ..tool.enhance_retrieval import EnhanceRetrieval
-    from ..tool.handle_shixun_tonggao import HandleTongzhiTonggao
-    from ..tool.water_machine_api import WaterMachineApi
-    from ..config.sql_config import SqlConfig
-    from ..tool.enhance_retrieval import DEFAULT_LLM_CONFIG_PATH
-    from ..tool.retrieval import DEFAULT_RETRIEVAL_DATA_PATH
-    from ..tool.retrieval import DEFAULT_RETRIEVAL_STORAGE_PATH
+# if __name__ == '__main__':
+#     from ..llm_api.ollama_llm import OllamaLLM
+#     from ..config.llm_config import LLMConfig
+#     from ..tool.direct_llm_community_ai_admin import DirectLLMCommunityAiAdmin
+#     from ..tool.direct_llm_community_ai_user import DirectLLMCommunityAiUser
+#     from ..tool.google_search import GoogleSearch
+#     from ..tool.weather_api import WeatherApi
+#     from ..tool.retrieval import Retrieval
+#     from ..tool.enhance_retrieval import EnhanceRetrieval
+#     from ..tool.handle_shixun_tonggao import HandleTongzhiTonggao
+#     from ..tool.water_machine_api import WaterMachineApi
+#     from ..config.sql_config import SqlConfig
+#     from ..tool.enhance_retrieval import DEFAULT_LLM_CONFIG_PATH
+#     from ..tool.retrieval import DEFAULT_RETRIEVAL_DATA_PATH
+#     from ..tool.retrieval import DEFAULT_RETRIEVAL_STORAGE_PATH
     
-    enhance_qwen_admin = EnhanceRetrieval(retrieval_flag=False, data_dir=DEFAULT_RETRIEVAL_DATA_PATH, index_dir=DEFAULT_RETRIEVAL_STORAGE_PATH)
-    retrieval = Retrieval(data_dir=DEFAULT_RETRIEVAL_DATA_PATH, index_dir=DEFAULT_RETRIEVAL_STORAGE_PATH)
-    direct_llm_tool = DirectLLMCommunityAiAdmin(enhance_llm=enhance_qwen_admin)
-    direct_llm_tool_user = DirectLLMCommunityAiUser(enhance_llm=enhance_qwen_admin)
-    google_search_tool = GoogleSearch(retrieval=retrieval)
-    weather_api = WeatherApi()
-    handle_tongzhi_tonggao = HandleTongzhiTonggao(enhance_llm=enhance_qwen_admin)
-    water_machine_api = WaterMachineApi()
-    planning_agent = PlanningAgentCommunityAiAdmin(
-        tools=[direct_llm_tool, weather_api, handle_tongzhi_tonggao],
-        enhance_llm=enhance_qwen_admin
-    )
+#     enhance_qwen_admin = EnhanceRetrieval(retrieval_flag=False, data_dir=DEFAULT_RETRIEVAL_DATA_PATH, index_dir=DEFAULT_RETRIEVAL_STORAGE_PATH)
+#     retrieval = Retrieval(data_dir=DEFAULT_RETRIEVAL_DATA_PATH, index_dir=DEFAULT_RETRIEVAL_STORAGE_PATH)
+#     direct_llm_tool = DirectLLMCommunityAiAdmin(enhance_llm=enhance_qwen_admin)
+#     direct_llm_tool_user = DirectLLMCommunityAiUser(enhance_llm=enhance_qwen_admin)
+#     google_search_tool = GoogleSearch(retrieval=retrieval)
+#     weather_api = WeatherApi()
+#     handle_tongzhi_tonggao = HandleTongzhiTonggao(enhance_llm=enhance_qwen_admin)
+#     water_machine_api = WaterMachineApi()
+#     planning_agent = PlanningAgentCommunityAiAdmin(
+#         tools=[direct_llm_tool, weather_api, handle_tongzhi_tonggao],
+#         enhance_llm=enhance_qwen_admin
+#     )
     
-    async def main():
-        async for chunk in planning_agent.agent_execute(
-            query="你是谁"
-        ):
-            print(chunk)
+#     async def main():
+#         async for chunk in planning_agent.agent_execute(
+#             query="你是谁"
+#         ):
+#             print(chunk)
             
             
-    import asyncio
-    asyncio.run(main())
+#     import asyncio
+#     asyncio.run(main())
     
     
     

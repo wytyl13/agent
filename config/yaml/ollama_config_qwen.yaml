@@ -797,47 +797,47 @@ json_tool: [
       }
     }
   },
-  {
-    "type": "function",
-    "function": {
-      "name": "HandleComprehensiveQuery",
-      "description": "该工具专用于跨表综合查询，支持老人档案、护理记录、健康数据等多维度信息整合查询！",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "operation": {
-            "type": "string",
-            "description": "综合查询操作",
-            "enum": ["ELDERLY_PROFILE", "NURSING_SUMMARY", "HEALTH_OVERVIEW", "APPROVAL_STATUS", "ROOM_OCCUPANCY", "STATISTICAL_REPORT"]
-          },
-          "query_type": {
-            "type": "string",
-            "enum": ["single_elderly", "room_based", "date_range", "statistical"],
-            "description": "查询类型"
-          },
-          "elderly_id": {
-            "type": "string",
-            "description": "老人ID，查询单个老人时使用"
-          },
-          "room_id": {
-            "type": "string", 
-            "description": "房间ID，按房间查询时使用"
-          },
-          "filters": {
-            "type": "object",
-            "properties": {
-              "start_date": {"type": "string", "description": "开始日期"},
-              "end_date": {"type": "string", "description": "结束日期"},
-              "nursing_level": {"type": "string", "description": "护理等级筛选"},
-              "residence_status": {"type": "string", "description": "入住状态筛选"},
-              "include_discharged": {"type": "boolean", "description": "是否包含已离院"}
-            }
-          }
-        },
-        "required": ["operation", "query_type"]
-      }
-    }
-  },
+  # {
+  #   "type": "function",
+  #   "function": {
+  #     "name": "HandleComprehensiveQuery",
+  #     "description": "该工具专用于跨表综合查询，支持老人档案、护理记录、健康数据等多维度信息整合查询！",
+  #     "parameters": {
+  #       "type": "object",
+  #       "properties": {
+  #         "operation": {
+  #           "type": "string",
+  #           "description": "综合查询操作",
+  #           "enum": ["ELDERLY_PROFILE", "NURSING_SUMMARY", "HEALTH_OVERVIEW", "APPROVAL_STATUS", "ROOM_OCCUPANCY", "STATISTICAL_REPORT"]
+  #         },
+  #         "query_type": {
+  #           "type": "string",
+  #           "enum": ["single_elderly", "room_based", "date_range", "statistical"],
+  #           "description": "查询类型"
+  #         },
+  #         "elderly_id": {
+  #           "type": "string",
+  #           "description": "老人ID，查询单个老人时使用"
+  #         },
+  #         "room_id": {
+  #           "type": "string", 
+  #           "description": "房间ID，按房间查询时使用"
+  #         },
+  #         "filters": {
+  #           "type": "object",
+  #           "properties": {
+  #             "start_date": {"type": "string", "description": "开始日期"},
+  #             "end_date": {"type": "string", "description": "结束日期"},
+  #             "nursing_level": {"type": "string", "description": "护理等级筛选"},
+  #             "residence_status": {"type": "string", "description": "入住状态筛选"},
+  #             "include_discharged": {"type": "boolean", "description": "是否包含已离院"}
+  #           }
+  #         }
+  #       },
+  #       "required": ["operation", "query_type"]
+  #     }
+  #   }
+  # },
           {
             "type": "function",
             "function": {
