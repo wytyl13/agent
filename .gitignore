@@ -1,0 +1,10 @@
+config/yaml/sql_config.yaml
+config/yaml/search_config.yaml
+config/yaml/postgresql_config.yaml
+models
+build
+retrieval_data
+retrieval_storage
+__pycache__/
+*.pyc
+*.pyo

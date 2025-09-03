@@ -1,0 +1,941 @@
+api_type: "ollama"  # or azure / ollama / open_llm etc. Check LLMType for more options
+model: "qwen2.5:7b-instruct"  # or gpt-3.5-turbo-1106 / gpt-4-1106-preview qwen2.5:7b-instruct
+base_url: "http://192.168.0.17:11434/api"
+model_tool: "toolcall_qwen2.5_q4"
+# json_tool: [
+    #     {
+    #         "type": "function",
+    #         "function": {
+    #             "name": "HandleTongzhiTonggao",
+    #             "description": "该工具专用于新增、修改、删除时讯消息或通告！",
+    #             "parameters": {
+    #                 "type": "object",
+    #                 "properties": {
+    #                     "operation": {
+    #                         "name": "operation",
+    #                         "description": "用户对时讯消息或通告的操作方式，从列表中选择其中一个：['ADD', 'DELETE', 'UPDATE', 'LIST']",
+    #                         "type": "string"
+    #                     },
+    #                     "type": {
+    #                         "name": "type",
+    #                         "description": "用户上传消息的类型，从列表中选择其中一个：[\"时讯消息\", \"通告\"]",
+    #                         "type": "string"
+    #                     },
+    #                     "content": {
+    #                         "name": "content",
+    #                         "description": "用户上传消息的内容",
+    #                         "type": "string"
+    #                     }
+    #                 },
+    #                 "required": ["operation", "type", "content"]
+    #             }
+    #         }
+    #     },
+    #     {
+    #         "type": "function",
+    #         "function": {
+    #             "name": "WeatherApi",
+    #             "description": "该工具专用于市、区县的实时天气查询",
+    #             "parameters": {
+    #                 "type": "object",
+    #                 "properties": {
+    #                     "query_key": {
+    #                         "name": "query_key",
+    #                         "description": "需要查询天气的地区（可以是直辖市、区县）",
+    #                         "type": "string"
+    #                     }
+    #                 },
+    #                 "required": ["query_key"]
+    #             }
+    #         }
+    #     },
+    #     {
+    #         "type": "function",
+    #         "function": {
+    #             "name": "WaterMachineApi",
+    #             "description": "物联网饮水机操作接口。",
+    #             "parameters": {
+    #                 "type": "object",
+    #                 "properties": {
+    #                     "operation": {
+    #                         "name": "operation",
+    #                         "description": "从用户关于饮水机操作的问题中提取相关的操作指令，可选择的指令包含：[水壶取水, 水壶停水, 停止加热, 开始保温, 停止保温, 打开语音, 关闭语音]",
+    #                         "type": "string"
+    #                     }
+    #                 },
+    #                 "required": ["operation"]
+    #             }
+    #         }
+    #     },
+    #     {
+    # "type": "function",
+    # "function": {
+    #     "name": "HealthReportSimple",
+    #     "description": "专门用于处理用户个人健康监测数据的所有查询。当用户问题明确涉及以下任一方面时，系统必须优先调用此工具：(1)睡眠相关指标（如\"睡眠报告\"、\"睡眠数据\"、\"睡眠质量\"、\"睡眠时长\"、\"睡眠效率\"、\"睡眠评分\"、\"深度睡眠\"、\"浅度睡眠\"）；(2)生理指标（如\"心率\"、\"心率异常\"、\"呼吸率\"、\"呼吸异常\"、\"体动次数\"、\"体动指数\"）；(3)健康状态（如\"健康评分\"、\"健康状况\"、\"健康异常\"）；(4)任何涉及用户个人监测数据的时间性查询（如\"昨晚\"、\"最近几天\"、\"本周\"、\"上周\"等时间段的健康数据）。HealthReport提供专业的健康数据解读和分析。",
+    #     "parameters": {
+    #         "type": "object",
+    #         "properties": {
+    #             "health_report_question": {
+    #                 "name": "health_report_question",
+    #                 "description": "用户关于睡眠健康报告的完整问题，需根据当前问题和历史对话上下文进行综合理解和总结。系统将分析用户的睡眠监测数据并提供专业解读。问题可涉及特定日期或时间段的睡眠质量分析、睡眠趋势比较、睡眠异常解释、健康建议等。系统将根据问题自动检索相关的睡眠数据记录，并给出专业的分析和建议。",
+    #                 "type": "string"
+    #                         }
+    #                 },
+    #         "required": ["health_report_question"]
+    #                 }
+    #             }
+    #     },
+    #     {
+    # "type": "function",
+    # "function": {
+    #     "name": "DirectLLMCommunityAiUser",
+    #     "description": "默认回答工具，负责无工具调用的兜底，上述工具无法调用时可调用该工具",
+    #     "parameters": {
+    #         "type": "object",
+    #         "properties": {
+    #             "question": {
+    #                 "name": "question",
+    #                 "description": "用户任何问题！",
+    #                 "type": "string"
+    #             }
+    #         },
+    #         "required": ["question"]
+    #                 }
+    #             }
+    #     }   
+#     ]
+json_tool: [
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleElderlyBasicInfo",
+      "description": "该工具专用于管理老人基础信息，包括新增、修改、删除和查询老人的个人资料！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "对老人基础信息的操作方式，从列表中选择其中一个",
+            "enum": ["ADD", "DELETE", "UPDATE", "LIST"]
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人唯一标识ID，更新、删除和查询单个老人时必需"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string", "description": "姓名"},
+              "gender": {"type": "string", "description": "性别"},
+              "birth_date": {"type": "string", "description": "出生日期"},
+              "height": {"type": "number", "description": "身高(cm)"},
+              "weight": {"type": "number", "description": "体重(kg)"},
+              "id_card": {"type": "string", "description": "身份证号"},
+              "phone": {"type": "string", "description": "电话"},
+              "address": {"type": "string", "description": "住址"},
+              "photo": {"type": "string", "description": "照片URL"}
+            },
+            "description": "老人基础信息数据"
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function", 
+    "function": {
+      "name": "HandleElderlyHealthRecord",
+      "description": "该工具专用于管理老人健康档案，包括入住时身体状况、药物过敏、担保人信息等医疗数据！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "对健康档案的操作方式",
+            "enum": ["ADD", "DELETE", "UPDATE", "LIST"]
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "institution_name": {"type": "string", "description": "机构名称"},
+              "archive_number": {"type": "string", "description": "档案号"},
+              "admission_health_status": {"type": "string", "description": "入住时身体状况"},
+              "guarantor_name": {"type": "string", "description": "担保人姓名"},
+              "guarantor_relation": {"type": "string", "description": "担保人关系"},
+              "guarantor_phone": {"type": "string", "description": "担保人电话"},
+              "drug_allergies": {"type": "array", "items": {"type": "string"}, "description": "过敏药物列表"},
+              "payment_method": {"type": "string", "description": "付费方式"}
+            }
+          }
+        },
+        "required": ["operation", "elderly_id"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleRoomManagement",
+      "description": "该工具专用于管理房间信息，包括房间的创建、修改、删除和查询，支持跌倒雷达和睡眠雷达配置！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "对房间的操作方式",
+            "enum": ["ADD", "DELETE", "UPDATE", "LIST"]
+          },
+          "room_id": {
+            "type": "string",
+            "description": "房间ID，更新和删除时必需"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "room_name": {"type": "string", "description": "房间名称"},
+              "room_type": {"type": "string", "description": "房间类型"},
+              "department_id": {"type": "string", "description": "部门ID"},
+              "has_fall_radar": {"type": "boolean", "description": "是否有跌倒雷达"},
+              "has_sleep_radar": {"type": "boolean", "description": "是否有睡眠雷达"}
+            }
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleBedManagement", 
+      "description": "该工具专用于管理床位信息，包括床位的分配、释放、查询状态等操作！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "对床位的操作方式",
+            "enum": ["ADD", "DELETE", "UPDATE", "LIST", "ASSIGN", "RELEASE"]
+          },
+          "bed_id": {
+            "type": "string",
+            "description": "床位ID"
+          },
+          "room_id": {
+            "type": "string",
+            "description": "房间ID"
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID，分配床位时使用"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "bed_name": {"type": "string", "description": "床位名称"},
+              "is_occupied": {"type": "boolean", "description": "是否被占用"}
+            }
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleElderlyAdmission",
+      "description": "该工具专用于老人入住登记的完整流程，包括评估、分配房间床位等跨表操作！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "入住流程操作",
+            "enum": ["REGISTER", "ASSESS", "ASSIGN_ROOM", "COMPLETE_ADMISSION", "LIST_APPLICATIONS"]
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID"
+          },
+          "room_id": {
+            "type": "string",
+            "description": "分配的房间ID"
+          },
+          "bed_id": {
+            "type": "string",
+            "description": "分配的床位ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "application_time": {"type": "string", "description": "申请时间"},
+              "health_condition": {"type": "string", "description": "健康状况详述"},
+              "special_requirements": {"type": "string", "description": "特殊要求"},
+              "trustees": {"type": "array", "items": {"type": "object"}, "description": "委托人信息数组"},
+              "assessment_required": {"type": "boolean", "description": "是否需要评估"}
+            }
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleAssessmentProcess",
+      "description": "该工具专用于老人能力评估流程，包括健康评估、运动能力、精神状态等多维度评估！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "评估流程操作",
+            "enum": ["START_ASSESSMENT", "UPDATE_STEP", "COMPLETE_ASSESSMENT", "VIEW_REPORT", "LIST"]
+          },
+          "assessment_id": {
+            "type": "string",
+            "description": "评估编号"
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID"
+          },
+          "step": {
+            "type": "number",
+            "description": "评估步骤(1-8)"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "assessment_date": {"type": "string", "description": "评估日期"},
+              "assessment_reason": {"type": "string", "description": "评估原因"},
+              "info_provider": {"type": "string", "description": "信息提供者"},
+              "contact_phone": {"type": "string", "description": "联系人电话"},
+              "health_issues": {"type": "object", "description": "健康相关问题JSON"},
+              "ability_assessment": {"type": "object", "description": "能力评估JSON"},
+              "motor_ability": {"type": "object", "description": "基础运动能力JSON"},
+              "mental_state": {"type": "object", "description": "精神状态JSON"},
+              "social_participation": {"type": "object", "description": "感知觉与社会参与JSON"}
+            }
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleNursingLevelManagement",
+      "description": "该工具专用于管理护理等级，包括照护等级评定、护理级别分类等操作！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "护理等级操作",
+            "enum": ["ADD", "UPDATE", "DELETE", "LIST", "EVALUATE"]
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "care_level": {"type": "string", "description": "照护等级"},
+              "nursing_level": {
+                "type": "string",
+                "enum": ["自理", "半护理", "全护理", "特别护理", "专人护理"],
+                "description": "护理等级"
+              },
+              "assessment_date": {"type": "string", "description": "评估日期"},
+              "assessor_signature": {"type": "string", "description": "评估人签名"}
+            }
+          }
+        },
+        "required": ["operation", "elderly_id"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleLeaveRequest",
+      "description": "该工具专用于老人请假申请管理，包括请假登记、审批流程等操作！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "请假操作类型",
+            "enum": ["APPLY", "APPROVE", "REJECT", "CANCEL", "LIST"]
+          },
+          "leave_id": {
+            "type": "string",
+            "description": "请假记录ID"
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "contact_phone": {"type": "string", "description": "联系电话"},
+              "leave_reason": {"type": "string", "description": "外出事由"},
+              "leave_time": {"type": "string", "description": "外出时间"},
+              "return_time": {"type": "string", "description": "返回时间"},
+              "family_signature": {"type": "string", "description": "家属签字"},
+              "approval_opinion": {"type": "string", "description": "审批意见"}
+            }
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleOutingManagement",
+      "description": "该工具专用于老人外出管理，包括外出登记、归院登记等操作！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "外出操作类型",
+            "enum": ["GO_OUT", "RETURN", "UPDATE", "LIST"]
+          },
+          "outing_id": {
+            "type": "string",
+            "description": "外出记录ID"
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "outing_date": {"type": "string", "description": "外出日期"},
+              "outing_time": {"type": "string", "description": "外出时间"},
+              "family_signature": {"type": "string", "description": "亲属签字"},
+              "return_time": {"type": "string", "description": "返回时间"},
+              "remarks": {"type": "string", "description": "备注"}
+            }
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleApprovalWorkflow",
+      "description": "该工具专用于管理各类审批流程，支持请假、外出、离院等多种类型的审批操作！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "审批操作类型",
+            "enum": ["SUBMIT", "APPROVE", "REJECT", "WITHDRAW", "LIST_PENDING", "LIST_APPROVED"]
+          },
+          "approval_type": {
+            "type": "string",
+            "enum": ["请假", "外出", "离院"],
+            "description": "审批类型"
+          },
+          "request_id": {
+            "type": "string",
+            "description": "申请ID"
+          },
+          "approver_id": {
+            "type": "string",
+            "description": "审批人ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "approval_opinion": {"type": "string", "description": "审批意见"},
+              "approver_signature": {"type": "string", "description": "审批人签名"},
+              "approval_content": {"type": "string", "description": "审批内容"}
+            }
+          }
+        },
+        "required": ["operation", "approval_type"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleNursingRecord",
+      "description": "该工具专用于护理记录管理，包括护理项目选择、护理照片上传等操作！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "护理记录操作",
+            "enum": ["ADD", "UPDATE", "DELETE", "LIST", "VIEW_DETAIL"]
+          },
+          "record_id": {
+            "type": "string",
+            "description": "护理记录ID"
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "caregiver_name": {"type": "string", "description": "护工名称"},
+              "nursing_items": {"type": "array", "items": {"type": "string"}, "description": "护理项目列表"},
+              "nursing_images": {"type": "array", "items": {"type": "string"}, "description": "护理照片数组"},
+              "nursing_time": {"type": "string", "description": "护理时间"},
+              "remarks": {"type": "string", "description": "备注"}
+            }
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleNursingItems",
+      "description": "该工具专用于护理项目配置管理，支持不同护理等级的护理项目设置！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "护理项目操作",
+            "enum": ["ADD", "UPDATE", "DELETE", "LIST", "LIST_BY_LEVEL"]
+          },
+          "item_id": {
+            "type": "string",
+            "description": "护理项目ID"
+          },
+          "nursing_level": {
+            "type": "string",
+            "description": "护理等级"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "item_name": {"type": "string", "description": "护理项名称"},
+              "item_value": {"type": "number", "description": "护理项值"},
+              "remarks": {"type": "string", "description": "备注"}
+            }
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleFireInspection",
+      "description": "该工具专用于消防巡查管理，包括巡查记录、照片上传、监控查看等操作！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "消防巡查操作",
+            "enum": ["ADD", "UPDATE", "DELETE", "LIST", "VIEW_DETAIL", "VIEW_MONITOR"]
+          },
+          "inspection_id": {
+            "type": "string",
+            "description": "巡查记录ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "inspection_area": {"type": "string", "description": "巡查区域"},
+              "inspection_images": {"type": "array", "items": {"type": "string"}, "description": "巡查照片数组"},
+              "inspection_description": {"type": "string", "description": "巡查描述"},
+              "inspector_name": {"type": "string", "description": "巡查人"},
+              "inspection_time": {"type": "string", "description": "巡查时间"}
+            }
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleKitchenManagement",
+      "description": "该工具专用于明厨亮灶管理，包括菜品供应、留样记录、监控查看等操作！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "厨房管理操作",
+            "enum": ["ADD_SUPPLY", "ADD_SAMPLE", "UPDATE_SUPPLY", "UPDATE_SAMPLE", "DELETE", "LIST_SUPPLY", "LIST_SAMPLE", "VIEW_MONITOR"]
+          },
+          "record_type": {
+            "type": "string",
+            "enum": ["供应", "留样"],
+            "description": "记录类型"
+          },
+          "record_id": {
+            "type": "string",
+            "description": "记录ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "supplier_name": {"type": "string", "description": "供应商名称"},
+              "supplier_phone": {"type": "string", "description": "供应商电话"},
+              "food_items": {"type": "array", "description": "菜品明细"},
+              "food_images": {"type": "array", "items": {"type": "string"}, "description": "菜品图片"},
+              "receiver_signature": {"type": "string", "description": "收货人签名"},
+              "sample_time": {"type": "string", "description": "留样时间"},
+              "meal_type": {"type": "string", "enum": ["早饭", "午饭", "晚饭"], "description": "餐次"},
+              "sample_images": {"type": "array", "items": {"type": "string"}, "description": "留样图片"}
+            }
+          }
+        },
+        "required": ["operation", "record_type"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleHealthCheckup",
+      "description": "该工具专用于日常体检管理，包括血压、身高体重等健康指标记录！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "体检记录操作",
+            "enum": ["ADD", "UPDATE", "DELETE", "LIST", "HEALTH_REPORT"]
+          },
+          "checkup_id": {
+            "type": "string",
+            "description": "体检记录ID"
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "checkup_time": {"type": "string", "description": "体检时间"},
+              "systolic_pressure": {"type": "number", "description": "高压"},
+              "diastolic_pressure": {"type": "number", "description": "低压"},
+              "height": {"type": "number", "description": "身高"},
+              "weight": {"type": "number", "description": "体重"},
+              "body_temperature": {"type": "number", "description": "体温"},
+              "heart_rate": {"type": "number", "description": "心率"}
+            }
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleDischargeApplication",
+      "description": "该工具专用于离院申请管理，包括退住申请、协议终止等完整离院流程！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "离院申请操作",
+            "enum": ["APPLY", "APPROVE", "REJECT", "COMPLETE", "LIST"]
+          },
+          "application_id": {
+            "type": "string",
+            "description": "离院申请ID"
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "discharge_date": {"type": "string", "description": "申请退住时间"},
+              "discharge_reason": {"type": "string", "description": "退住原因"},
+              "applicant_name": {"type": "string", "description": "退住申请人"},
+              "relationship": {"type": "string", "description": "与老人关系"},
+              "contact_info": {"type": "string", "description": "联系方式"},
+              "contract_termination_date": {"type": "string", "description": "终止协议时间"},
+              "signature": {"type": "string", "description": "电子签名"}
+            }
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleDiseaseAndMedication",
+      "description": "该工具专用于老人病症和用药管理，包括诊断记录、用药情况等医疗数据！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "病症用药操作",
+            "enum": ["ADD", "UPDATE", "DELETE", "LIST", "ADD_MEDICATION", "REMOVE_MEDICATION"]
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "diagnosis_json": {"type": "object", "description": "病症诊断JSON数据"},
+              "medication_json": {"type": "object", "description": "用药情况JSON数据"},
+              "disease_ids": {"type": "array", "items": {"type": "string"}, "description": "病症ID列表"},
+              "medications": {"type": "array", "description": "药物列表"}
+            }
+          }
+        },
+        "required": ["operation", "elderly_id"]
+      }
+    }
+  },
+  {
+    "type": "function", 
+    "function": {
+      "name": "HandleSleepMonitoring",
+      "description": "该工具专用于睡眠监控管理，包括实时睡眠信息查看、睡眠报告生成等操作！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "睡眠监控操作",
+            "enum": ["VIEW_REALTIME", "VIEW_REPORT", "GENERATE_REPORT", "LIST_HISTORY", "SET_ALERT"]
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID"
+          },
+          "bed_id": {
+            "type": "string",
+            "description": "床位ID"
+          },
+          "date_range": {
+            "type": "object",
+            "properties": {
+              "start_date": {"type": "string", "description": "开始日期"},
+              "end_date": {"type": "string", "description": "结束日期"}
+            },
+            "description": "日期范围"
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleRiskEventManagement", 
+      "description": "该工具专用于照护风险事件管理，包括风险事件记录、预警设置、统计分析等操作！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "风险事件操作",
+            "enum": ["ADD", "UPDATE", "DELETE", "LIST", "ANALYSIS", "SET_ALERT"]
+          },
+          "event_id": {
+            "type": "string",
+            "description": "风险事件ID"
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "event_type": {"type": "string", "description": "风险事件类型"},
+              "event_description": {"type": "string", "description": "事件描述"},
+              "occurrence_time": {"type": "string", "description": "发生时间"},
+              "severity_level": {"type": "string", "enum": ["低", "中", "高"], "description": "严重程度"},
+              "handling_measures": {"type": "string", "description": "处理措施"},
+              "follow_up_required": {"type": "boolean", "description": "是否需要跟进"}
+            }
+          }
+        },
+        "required": ["operation"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "HandleComprehensiveQuery",
+      "description": "该工具专用于跨表综合查询，支持老人档案、护理记录、健康数据等多维度信息整合查询！",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "综合查询操作",
+            "enum": ["ELDERLY_PROFILE", "NURSING_SUMMARY", "HEALTH_OVERVIEW", "APPROVAL_STATUS", "ROOM_OCCUPANCY", "STATISTICAL_REPORT"]
+          },
+          "query_type": {
+            "type": "string",
+            "enum": ["single_elderly", "room_based", "date_range", "statistical"],
+            "description": "查询类型"
+          },
+          "elderly_id": {
+            "type": "string",
+            "description": "老人ID，查询单个老人时使用"
+          },
+          "room_id": {
+            "type": "string", 
+            "description": "房间ID，按房间查询时使用"
+          },
+          "filters": {
+            "type": "object",
+            "properties": {
+              "start_date": {"type": "string", "description": "开始日期"},
+              "end_date": {"type": "string", "description": "结束日期"},
+              "nursing_level": {"type": "string", "description": "护理等级筛选"},
+              "residence_status": {"type": "string", "description": "入住状态筛选"},
+              "include_discharged": {"type": "boolean", "description": "是否包含已离院"}
+            }
+          }
+        },
+        "required": ["operation", "query_type"]
+      }
+    }
+  },
+          {
+            "type": "function",
+            "function": {
+                "name": "HandleTongzhiTonggao",
+                "description": "该工具专用于新增、修改、删除时讯消息或通告！",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "operation": {
+                            "name": "operation",
+                            "description": "用户对时讯消息或通告的操作方式，从列表中选择其中一个：['ADD', 'DELETE', 'UPDATE', 'LIST']",
+                            "type": "string"
+                        },
+                        "type": {
+                            "name": "type",
+                            "description": "用户上传消息的类型，从列表中选择其中一个：[\"时讯消息\", \"通告\"]",
+                            "type": "string"
+                        },
+                        "content": {
+                            "name": "content",
+                            "description": "用户上传消息的内容",
+                            "type": "string"
+                        }
+                    },
+                    "required": ["operation", "type", "content"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "WeatherApi",
+                "description": "该工具专用于市、区县的实时天气查询",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query_key": {
+                            "name": "query_key",
+                            "description": "需要查询天气的地区（可以是直辖市、区县）",
+                            "type": "string"
+                        }
+                    },
+                    "required": ["query_key"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "WaterMachineApi",
+                "description": "物联网饮水机操作接口。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "operation": {
+                            "name": "operation",
+                            "description": "从用户关于饮水机操作的问题中提取相关的操作指令，可选择的指令包含：[水壶取水, 水壶停水, 停止加热, 开始保温, 停止保温, 打开语音, 关闭语音]",
+                            "type": "string"
+                        }
+                    },
+                    "required": ["operation"]
+                }
+            }
+        },
+        {
+    "type": "function",
+    "function": {
+        "name": "HealthReportSimple",
+        "description": "专门用于处理用户个人健康监测数据的所有查询。当用户问题明确涉及以下任一方面时，系统必须优先调用此工具：(1)睡眠相关指标（如\"睡眠报告\"、\"睡眠数据\"、\"睡眠质量\"、\"睡眠时长\"、\"睡眠效率\"、\"睡眠评分\"、\"深度睡眠\"、\"浅度睡眠\"）；(2)生理指标（如\"心率\"、\"心率异常\"、\"呼吸率\"、\"呼吸异常\"、\"体动次数\"、\"体动指数\"）；(3)健康状态（如\"健康评分\"、\"健康状况\"、\"健康异常\"）；(4)任何涉及用户个人监测数据的时间性查询（如\"昨晚\"、\"最近几天\"、\"本周\"、\"上周\"等时间段的健康数据）。HealthReport提供专业的健康数据解读和分析。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "health_report_question": {
+                    "name": "health_report_question",
+                    "description": "用户关于睡眠健康报告的完整问题，需根据当前问题和历史对话上下文进行综合理解和总结。系统将分析用户的睡眠监测数据并提供专业解读。问题可涉及特定日期或时间段的睡眠质量分析、睡眠趋势比较、睡眠异常解释、健康建议等。系统将根据问题自动检索相关的睡眠数据记录，并给出专业的分析和建议。",
+                    "type": "string"
+                            }
+                    },
+            "required": ["health_report_question"]
+                    }
+                }
+        },
+        {
+    "type": "function",
+    "function": {
+        "name": "DirectLLMCommunityAiUser",
+        "description": "默认回答工具，负责无工具调用的兜底，上述工具无法调用时可调用该工具",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "name": "question",
+                    "description": "用户任何问题！",
+                    "type": "string"
+                }
+            },
+            "required": ["question"]
+                    }
+                }
+        }   
+]

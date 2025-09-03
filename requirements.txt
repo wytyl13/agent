@@ -1,0 +1,35 @@
+# agent
+aiomysql
+asyncpg
+readability-lxml # 需要代理
+trafilatura
+bs4
+newspaper3k
+gne
+colorlog
+aiohttp
+openai
+simhash
+pydantic
+PyYAML
+sqlalchemy
+mysql-connector-python
+numpy==1.26.4
+matplotlib
+nest_asyncio
+pytest-asyncio
+pytest
+python-docx
+llama-index-embeddings-huggingface
+llama-index-readers-file
+llama-index-retrievers-bm25
+huggingface-hub
+alibabacloud_iqs20240712
+pypdf
+rank_bm25
+jieba
+psutil
+rich
+modelscope
+torchaudio>=2.6.0
+dotenv
