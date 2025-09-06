@@ -490,6 +490,7 @@ class APIRequestor:
                 data = params
             if params and not files:
                 data = json.dumps(params).encode()
+                # data = json.dumps(params)
                 # data = params
                 headers["Content-Type"] = "application/json"
         else:

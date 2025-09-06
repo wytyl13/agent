@@ -407,7 +407,7 @@ if __name__ == '__main__':
 
 
 
-
+    #    question参数传入用户提问的问题， chat_history送入用户的交互信息
         async for chunk, messages in direct_llm.execute(question="饮水机操作，水壶加热", chat_history = history,role="admin"):
             print(chunk)
 
