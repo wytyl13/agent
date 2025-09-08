@@ -143,7 +143,15 @@ class BaseTool(ABC, BaseModel):
                 # 添加到必需参数列表
                 tool_info["parameters"]["required"].append(param_name)
         
-        return tool_info
+        for key,value in tool_info['parameters']['properties'].items():
+            name = value['title']
+            value["name"] = name.lower()
+            del value['title']
+        dct = {}
+        dct["type"] = "function"
+        dct["function"] = tool_info
+            
+        return dct
     
     
     def model_json_schema(

@@ -10,7 +10,8 @@ from typing import (
     Optional,
     Type,
     List,
-    Dict
+    Dict,
+    Any
 )
 from pydantic import BaseModel, Field
 from pathlib import Path
@@ -42,6 +43,11 @@ class PlanningAgentCommunityAiUserSchema(BaseModel):
         ...,
         description="Agent可以使用的工具域"
     )
+
+    chat_history: List = Field(
+        description="对话历史字段"
+    )
+
     
 
 
@@ -68,7 +74,9 @@ class PlanningAgentCommunityAiUser:
         
         if self.tools:
             self._init_descs_names()
-
+            self.tool_call_json = [tool.tool_schema for tool in self.tools]
+            print(self.tool_call_json)
+  
 
 
     def _get_context(self):
@@ -108,18 +116,15 @@ class PlanningAgentCommunityAiUser:
             self.tool_names = ', '.join([tool.name for tool in self.tools])
         except Exception as e:
             raise ValueError("Fail to init the tool_descs and tool_names!")
-    
-    
+        
+
+
+
+
     async def agent_execute(
         self, 
         query, 
-        chat_history, 
-        retrieval_flag=False, 
-        retry_count=0, 
-        max_retries=3,
-        username: str = None,
-        location: str = None,
-        role: str = None,
+        chat_history,
 
     ):
         
@@ -144,7 +149,7 @@ class PlanningAgentCommunityAiUser:
 
         self.logger.info(f"---等待LLM返回... ...\n{messages}")
         try:
-            response = await self.enhance_llm.llm._whoami_text(messages=messages, timeout=360,use_tool=True,temperature=0.0)
+            response = await self.enhance_llm.llm._whoami_text(messages=messages, timeout=360,use_tool=True,temperature=0.0,tool_call_json = self.tool_call_json)
             if not response:
                raise Exception("工具调用模块返回为空")
             self.logger.info(f"---LLM返回... ...\n{response}")
@@ -229,25 +234,14 @@ class PlanningAgentCommunityAiUser:
         tools: Optional[list[any]] = None,
         question: str = None,
         chat_history: Optional[List] = None,
-        retry_times: Optional[int] = 3,
-        retrieval_flag: Optional[bool] = True,
-        username: str = None,
-        location: str = None,
-        role: str = None
     ):
         if tools:
             self.tools = tools
             self._init_descs_names()
-
+            self.tool_call_json = [tool.tool_schema for tool in self.tools]
 
         async for chunk in self.agent_execute(
             query=question,
             chat_history=chat_history or [],
-            retrieval_flag=retrieval_flag,
-            retry_count=0,
-            max_retries=retry_times,
-            username=username,
-            location=location,
-            role=role
         ):
             yield chunk

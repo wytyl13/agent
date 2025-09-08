@@ -1091,3 +1091,7 @@ PlanningAgentCommunityAiUser:
 
     Question: {query}
     {agent_scratchpad}
+
+DataCenter:
+  description: 专用于客户档案查询和数据统计分析服务，用户可以查询客户信息、服务数据统计等。
+  system_prompt: |

@@ -351,78 +351,7 @@ if __name__ == '__main__':
     asyncio.run(main())
 ```
 
-### 5. 使用agent tool call
-```python
-import os
-os.environ["ENV_FILE"] = "agent/config/yaml/.env"
-from agent.tool.planning_agent_community_ai_user import PlanningAgentCommunityAiUser
-import asyncio
-from agent.llm_api.ollama_llm import OllamaLLM
-from agent.tool.enhance_retrieval import EnhanceRetrieval
-from agent.config.llm_config import LLMConfig
-from pathlib import Path
-import asyncio
 
-from agent.tool.handle_shixun_tonggao import HandleTongzhiTonggao
-from agent.tool.water_machine_api import WaterMachineApi
-from agent.tool.weather_api import WeatherApi
-from agent.tool.retrieval import Retrieval
-from agent.tool.direct_llm import DirectLLM
-from agent.tool.google_search import GoogleSearch
-from agent.tool.retrieval import DEFAULT_RETRIEVAL_DATA_PATH
-from agent.tool.retrieval import DEFAULT_RETRIEVAL_STORAGE_PATH
-
-
-if __name__ == '__main__':
-    
-    llm_qwen = OllamaLLM(config=LLMConfig.from_file(Path('agent/config/yaml/ollama_config_qwen_base.yaml')))
-    enhance_qwen = EnhanceRetrieval(llm=llm_qwen)
-    retrieval = Retrieval()
-    direct_llm_tool = DirectLLM(enhance_llm=enhance_qwen)
-    weather_api = WeatherApi()
-
-
-    enhance_qwen_admin = EnhanceRetrieval(retrieval_flag=False, data_dir=DEFAULT_RETRIEVAL_DATA_PATH, index_dir=DEFAULT_RETRIEVAL_STORAGE_PATH)
-    handle_tongzhi_tonggao = HandleTongzhiTonggao(enhance_llm=enhance_qwen_admin)
-    weather_api = WeatherApi()
-    water_machine_api = WaterMachineApi()
-
-    init_tools = [handle_tongzhi_tonggao, weather_api, water_machine_api,direct_llm_tool]
-    
-    llm = OllamaLLM(
-        config=LLMConfig.from_file(
-            Path('agent/config/yaml/ollama_config_qwen.yaml')
-        )
-    )
-
-    # ["饮水机操作，水壶加热","运城天气怎么样","新增一条通告"] 问题实例
-    
-    enhance_retrieval = EnhanceRetrieval(llm=llm)
-    
-    direct_llm = PlanningAgentCommunityAiUser(enhance_llm=enhance_retrieval,tools=init_tools)
-    
-    history = []
-    async def main():
-
-
-
-
-    #    question参数传入用户提问的问题， chat_history送入用户的交互信息
-        async for chunk, messages in direct_llm.execute(question="饮水机操作，水壶加热", chat_history = history,role="admin"):
-            print(chunk)
-
-            history.extend(messages)
-        async for chunk, messages in direct_llm.execute(question="查询一号病人的信息", chat_history = history,role="admin"):
-            print(chunk)
-            history.extend(messages)
-
-            
-            
-    asyncio.run(main())
-
-
-
-```
 
 ## 项目结构说明
 

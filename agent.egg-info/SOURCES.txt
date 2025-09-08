@@ -1,5 +1,6 @@
 README.md
 setup.py
+./__init__.py
 ./base/__init__.py
 ./base/base_tool.py
 ./base/conditional_rule.py
@@ -20,7 +21,6 @@ setup.py
 ./config/sql_config.py
 ./config/yaml/.env
 ./config/yaml/ollama_config_qwen.yaml
-./config/yaml/ollama_config_qwen_base.yaml
 ./config/yaml/search_config_case.yaml
 ./config/yaml/sql_config_case.yaml
 ./config/yaml/tool_config.yaml
@@ -55,7 +55,6 @@ setup.py
 ./tool/planning_agent.py
 ./tool/planning_agent_community_ai_admin.py
 ./tool/planning_agent_community_ai_user.py
-./tool/planning_agent_community_ai_user_bak.py
 ./tool/real_time_health_report_advice.py
 ./tool/relevance_extract.py
 ./tool/retrieval.py

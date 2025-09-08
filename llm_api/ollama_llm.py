@@ -35,7 +35,7 @@ class OllamaLLM(BaseLLM):
         assert config.base_url, "ollama base url is required!"
         self.model = config.model
         self.model_tool = config.model_tool
-        self.json_tool = config.json_tool
+        # self.json_tool = config.json_tool
 
     def get_choice_text(self, res: dict) -> str:
         """提取响应中的文本内容"""
@@ -88,7 +88,7 @@ class OllamaLLM(BaseLLM):
             self.logger.error(f"Error decoding chunk: {e}")
             return {"content": "", "done": False}
 
-    def _const_kwargs(self, messages: list[dict], stream: bool = False, user_stop_words: list = [], use_tool: bool = False, temperature: float = None) -> dict:
+    def _const_kwargs(self, messages: list[dict], stream: bool = False, user_stop_words: list = [], use_tool: bool = False, temperature: float = None,tools:list = None) -> dict:
         # 合并默认终止符和用户提供的终止符
         # 提取system消息
         kwargs = {
@@ -98,15 +98,17 @@ class OllamaLLM(BaseLLM):
                 {
                     "temperature": self.temperature,
                 }, 
-            "stream": stream
+            "stream": stream,
+
         }
         
         if user_stop_words:
             kwargs["options"]["stop"] = user_stop_words
         if use_tool:
-            kwargs["tools"] = self.json_tool
+            kwargs["tools"] = tools
             kwargs["model"] = self.model_tool
             # kwargs["options"]["top_p"] = 0.5
+            
         if temperature is not None:
             kwargs["options"]["temperature"] = temperature
         self.logger.debug(f"Constructed kwargs: {kwargs}")
@@ -128,16 +130,16 @@ class OllamaLLM(BaseLLM):
         
         return resp
 
-    async def _whoami_text(self, messages: List[Dict[str, str]], timeout: int, user_stop_words: List[str]=[], use_tool: bool = False,temperature: float = None) -> dict:
+    async def _whoami_text(self, messages: List[Dict[str, str]], timeout: int, user_stop_words: List[str]=[], use_tool: bool = False,temperature: float = None, tool_call_json: list = None) -> dict:
         """Non-streaming text completion"""
         try:
             start_time = time.time()
             self.logger.debug(f"Starting _whoami_text with timeout {timeout}")
-            self.logger.debug(f"Request params: {self._const_kwargs(messages=messages, user_stop_words=user_stop_words,use_tool=use_tool,temperature=temperature)}")
+            self.logger.debug(f"Request params: {self._const_kwargs(messages=messages, user_stop_words=user_stop_words,use_tool=use_tool,tools=tool_call_json,temperature=temperature)}")
             resp, _, _ = await self.client.arequest(
                 method=self.http_method,
                 url=self.suffix_url,
-                params=self._const_kwargs(messages=messages, user_stop_words=user_stop_words,use_tool=use_tool,temperature=temperature),
+                params=self._const_kwargs(messages=messages, user_stop_words=user_stop_words,use_tool=use_tool,temperature=temperature,tools=tool_call_json),
                 request_timeout=timeout,
             )
             
