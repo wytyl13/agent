@@ -138,13 +138,13 @@ class PlanningAgentCommunityAiUser:
         if chat_history:
             chat_history.append({"role":"user","content":query})
             messages = chat_history
-            return_message = chat_history.copy()
+            # return_message = chat_history.copy()
 
         else:
             messages = []
             return_message = []
             messages.append({"role": "user", "content": query})
-            return_message.append({"role": "user", "content": query})
+            # return_message.append({"role": "user", "content": query})
 
 
         self.logger.info(f"---等待LLM返回... ...\n{messages}")
@@ -167,13 +167,29 @@ class PlanningAgentCommunityAiUser:
                 # 5 匹配tool
                 yield f"=============工具调用提取的参数信息============={tool_name, tool_arguments}", messages
                 
-                # the_tool = None
-                # for t in self.tools:
-                #     # if t.name == action: # 使用更加严格的工具匹配
-                #     if t.name in tool_name:
-                #         the_tool = t
-                #         break
-                # tool_name = the_tool.name
+                the_tool = None
+                for t in self.tools:
+                    # if t.name == action: # 使用更加严格的工具匹配
+                    if t.name in tool_name:
+                        the_tool = t
+                        break
+                tool_name = the_tool.name
+
+                tool_ret = ""
+                if the_tool.end_flag == 1:
+                    
+                    async for chunk in the_tool.execute(**tool_arguments):
+                        tool_ret += chunk
+                    self.logger.info(f"---执行tool结果... ...\n{tool_ret}")
+                else:
+                    tool_ret = await the_tool.execute(**tool_arguments)
+                    self.logger.info(f"---执行tool结果... ...\n{tool_ret}")
+                
+                messages.append({"role": "observation", "content": tool_ret})
+                yield tool_ret,messages
+                
+
+
 
 
 

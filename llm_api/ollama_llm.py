@@ -105,8 +105,9 @@ class OllamaLLM(BaseLLM):
         if user_stop_words:
             kwargs["options"]["stop"] = user_stop_words
         if use_tool:
-            kwargs["tools"] = tools
             kwargs["model"] = self.model_tool
+            if tools:
+                kwargs["tools"] = tools
             # kwargs["options"]["top_p"] = 0.5
             
         if temperature is not None:
