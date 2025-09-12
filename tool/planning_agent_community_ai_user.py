@@ -180,17 +180,34 @@ class PlanningAgentCommunityAiUser:
                     
                     async for chunk in the_tool.execute(**tool_arguments):
                         tool_ret += chunk
-                    self.logger.info(f"---执行tool结果... ...\n{tool_ret}")
+                    self.logger.info(f"---执行tool结果... ...流式\n{tool_ret}")
+                    messages.append({"role": "observation", "content": tool_ret})
+                    yield tool_ret,messages
                 else:
                     tool_ret = await the_tool.execute(**tool_arguments)
-                    self.logger.info(f"---执行tool结果... ...\n{tool_ret}")
-                
-                messages.append({"role": "observation", "content": tool_ret})
-                yield tool_ret,messages
-                
+                    self.logger.info(f"---执行tool结果... ...非流式\n{tool_ret}")
+                    messages.append({"role": "observation", "content": tool_ret})
+                    final_response = await  self.enhance_llm.llm._whoami_text(messages=messages, timeout=120, use_tool=True,temperature=0.0,tool_call_json = self.tool_call_json)
+                    messages.append({"role": "assistant", "content": final_response})
+                    yield final_response,messages
 
 
 
+
+
+                # tool_ret = ""
+                # async for chunk in the_tool.execute(**tool_arguments):
+                #         tool_ret += chunk
+                # self.logger.info(f"---执行tool结果... ...\n{tool_ret}")
+                # messages.append({"role": "observation", "content": tool_ret})
+               
+                # if the_tool.end_flag == 1:
+                #     messages.append({"role": "assistant", "content": tool_ret})
+                #     yield tool_ret,messages
+                # else:
+                #     final_response = await  self.enhance_llm.llm._whoami_text(messages=messages, timeout=30, use_tool=True,temperature=0.0,tool_call_json = self.tool_call_json)
+                #     messages.append({"role": "assistant", "content": final_response})
+                #     yield tool_ret,messages
 
 
             # 6 执行tool
