@@ -155,7 +155,7 @@ class PlanningAgentCommunityAiUser:
             self.logger.info(f"---LLM返回... ...\n{response}")
 
 
-            result = re.match("<tool_call>\n(.*)\n</tool_call>",response)
+            result = re.search("<tool_call>\n(.*)\n</tool_call>",response)
             if result:  
                 messages.append({"role": "function_call", "content": response})
                 tool_json_string = result.group(1)
