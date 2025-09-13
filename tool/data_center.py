@@ -24,10 +24,10 @@ from agent.base.base_tool import tool
 class DataCenterSchema(BaseModel):
 
     type: str = Field(
-        description="查询类型: str = <profile: 查询用户基本信息, statistics：查询统计信息>"
+        description="查询类型: str = <profile: 查询用户基本信息, statistics: 查询统计信息, alert: 查询报警信息, yunying: 本月各站点运营数据>"
     )
     content: str = Field(
-        description="查询内容"
+        description="查询内容>"
     )
 
 
@@ -35,7 +35,7 @@ class DataCenterSchema(BaseModel):
 class DataCenter:
     args_schema: Type[BaseModel] = DataCenterSchema
     end_flag: int = 1
-
+    
     
     @overload
     def __init__(
@@ -114,7 +114,7 @@ class DataCenter:
                 {"name": "张秀英", "age": "72岁", "address": "幸福小区3栋201室", "contact": "李想", "health_status": "血压偏高，需定期监测", "service_type": "居家护理+助餐服务"},
             ]
             result = self.format_table_data_markdown(type=content, key_mapping=key_mapping, data_list=data_list)
-            result = result + "\n" + "<image>/work/ai/agent_chainlit/public/background_big1.png<image>" 
+            result = result + "\n" + "<image>/work/ai/agent_chainlit/public/nainai.jpg</image>" 
         if type == "statistics":
             key_mapping = {
                 "object": "统计项目",
@@ -139,7 +139,34 @@ class DataCenter:
                     {"main_type": "维修报修", "distribution": "22%"},
                 ]
             )
-            
+        if type == "yunying":
+            key_mapping = {
+                "unit": "站点",
+                "orders": "订单数",
+                "satisfaction": "满意度",
+            }
+            data_list = [
+                {"unit": "幸福站", "orders": "865", "satisfaction": "0.99"},
+                {"unit": "和谐站", "orders": "743", "satisfaction": "0.98"},
+                {"unit": "康乐站", "orders": "621", "satisfaction": "0.97"},
+            ]
+            result = self.format_table_data_markdown(type=content, key_mapping=key_mapping, data_list=data_list)
+            result = result + "\n" + "<zhuyunying>1</zhuyunying>"
+        
+        if type == "alert":
+            key_mapping = {
+                "create_time": "时间",
+                "event": "事件",
+                "reason": "事件调查原因",
+                "status": "状态",
+            }
+            data_list = [
+                {"create_time": "2025-09-08 08:00", "event": "王奶奶按下紧急按钮", "reason": "突感心慌，家庭医生已上门检查，无大碍", "status": "已处理✅"},
+                {"create_time": "2025-09-08 12:00", "event": "刘爷爷未按时服药提醒", "reason": "午睡忘记，已提醒服药", "status": "已处理✅"},
+                {"create_time": "2025-09-08 22:00", "event": "李奶奶未按时回家", "reason": "去王奶奶家串门了", "status": "已处理✅"},
+            ]
+            result = self.format_table_data_markdown(type=content, key_mapping=key_mapping, data_list=data_list)
+        
         for item in result:
             yield item
         return

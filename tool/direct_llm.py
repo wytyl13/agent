@@ -64,7 +64,8 @@ if __name__ == '__main__':
     llm = OllamaLLM(config=LLMConfig.from_file(Path('/work/ai/agent/config/yaml/ollama_config_qwen.yaml')))
     print(llm.config)
     enhance_llm = EnhanceRetrieval(
-        llm=llm
+        llm=llm,
+        embedding_model_path="/work/ai/agent/models"
     )
     direct_llm = DirectLLM(enhance_llm=enhance_llm)
     

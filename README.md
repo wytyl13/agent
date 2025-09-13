@@ -351,6 +351,77 @@ if __name__ == '__main__':
     asyncio.run(main())
 ```
 
+### 5. function_call使用示例
+```
+from .client_service import ClientService
+from .order import Order
+from .role import Role
+
+QWEN_OLLAMA_CONFIG_PATH = "/work/ai/agent/config/yaml/ollama_config_qwen.yaml"
+llm_qwen = OllamaLLM(config=LLMConfig.from_file(Path(QWEN_OLLAMA_CONFIG_PATH)))
+DEFAULT_RETRIEVAL_DATA_PATH = "/work/ai/agent/retrieval_data"
+DEFAULT_RETRIEVAL_STORAGE_PATH = "/work/ai/agent/retrieval_storage"
+enhance_qwen_admin = EnhanceRetrieval(
+    llm=llm_qwen, 
+    retrieval_flag=False, 
+    data_dir=DEFAULT_RETRIEVAL_DATA_PATH, 
+    index_dir=DEFAULT_RETRIEVAL_STORAGE_PATH,
+    embedding_model_path="/work/ai/agent/models"
+)
+
+
+client_service = ClientService()
+order = Order()
+role = Role()
+tools = [client_service, order, role]
+function_call = FunctionCall(
+    tools = [client_service, order, role],
+    enhance_llm=enhance_qwen_admin,
+)
+
+
+async def main():
+    result = None
+    history_message = None
+    
+    # function_call_case_1
+    # tools = [client_service, order, role]
+    # messages=[
+    #     {"role": "user", "content": "帮我预定1份鸡蛋"},
+    #     {"role": "assistant", "content": "好的，收到订单：鸡蛋 * 1。</text_value><confirm>请确认是否下单？</confirm>"},
+    #     {"role": "user", "content": "确认"},
+    #     {"role": "assistant", "content": "好的，已经帮您预定鸡蛋 * 1"},
+    #     {"role": "user", "content": "帮我预定1杯牛奶"},
+    #     {"role": "assistant", "content": "好的，收到订单：牛奶 * 1。</text_value><confirm>请确认是否下单？</confirm>"},
+    #     {"role": "user", "content": "取消"},
+    #     {"role": "assistant", "content": "好的，没有为您下订单。如果您改变主意，请告诉我。"},
+    # ]
+    
+    
+    # function_call_case_2
+    tools = [client_service, order, role]
+    messages=[
+        {"role": "user", "content": "我要新增一个角色"},
+        {"role": "assistant", "content": "请提供具体的角色名称！"},
+        {"role": "user", "content": "产品经理"},
+        {"role": "assistant", "content": "请提供具体的权限！您可以从如下权限中选择：['服务项目管理', '商品分类管理', '设备类别管理']"},
+        {"role": "user", "content": "服务项目和商品分类"},
+        {"role": "assistant", "content": "<text_value>好的，收到新增：产品经理 * ['服务项目管理', '商品分类管理']。</text_value><confirm>请确认是否操作新增？</confirm>"},
+    ]
+    
+    chunks = []
+    async for chunk in function_call.execute(
+        question="确认",
+        messages=messages,
+        tools=tools
+    ):
+        chunks.append(chunk)
+    result = ''.join(chunks)
+    print(result)
+asyncio.run(main())
+```
+
+
 
 
 ## 项目结构说明

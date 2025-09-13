@@ -64,7 +64,8 @@ class EnhanceRetrieval:
         retrieval_flag: Optional[bool] = True,
         data_dir: Optional[str] = None,
         index_dir: Optional[str] = None,
-        llm_config_path: Optional[str] = None
+        llm_config_path: Optional[str] = None,
+        embedding_model_path: Optional[str] = None
     ):
         ...
     
@@ -84,8 +85,10 @@ class EnhanceRetrieval:
                 self.index_dir = kwargs.pop('index_dir')
             if 'llm_config_path' in kwargs:
                 self.llm_config_path = kwargs.pop('llm_config_path')
+            if 'embedding_model_path' in kwargs:
+                self.llm_config_path = kwargs.pop('embedding_model_path')
         
-            self.retrieval = Retrieval(data_dir=self.data_dir, index_dir=self.index_dir) if self.retrieval is None else self.retrieval
+            self.retrieval = Retrieval(data_dir=self.data_dir, index_dir=self.index_dir, embedding_model_path=self.embedding_model_path) if self.retrieval is None else self.retrieval
             if self.llm is None:
                 try:
                     self.llm_config_path = DEFAULT_LLM_CONFIG_PATH if self.llm_config_path is None else self.llm_config_path

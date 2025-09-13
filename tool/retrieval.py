@@ -60,18 +60,7 @@ DEFAULT_EMBEDDING_MODEL = str(MODELS_DIRECTORY / "embedding" / "AI-ModelScope" /
 
 
 
-def ensure_embedding_model():
-    model_path = Path(DEFAULT_EMBEDDING_MODEL)
-    if not model_path.exists():
-        # 如果模型不存在，使用 ModelScope 下载
-        from modelscope import snapshot_download
-        return snapshot_download(
-            model_id='AI-ModelScope/bge-large-zh-v1.5',
-            cache_dir=str(model_path.parent.parent)
-        )
-    return str(model_path)
 
-ensure_embedding_model()
 
 class RetrievalSchema(BaseModel):
     retrieval_word: str = Field(
@@ -114,7 +103,8 @@ class Retrieval:
     static_index: Optional[VectorStoreIndex] = None
     static_bm25_retriever: Optional[BM25Retriever] = None
     line_based_chunk: Optional[bool] = None
-
+    embedding_model_path: Optional[str] = None
+    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if 'data_dir' in kwargs:
@@ -136,15 +126,18 @@ class Retrieval:
         # 添加这一行
         if 'line_based_chunk' in kwargs:
             self.line_based_chunk = kwargs.pop('line_based_chunk')
+            
+        if 'embedding_model_path' in kwargs:
+            self.embedding_model_path = kwargs.pop('embedding_model_path')
         
         # 初始化一些东西
         self.chunk_size = 512 if self.chunk_size is None else self.chunk_size
         self.chunk_overlap = 20 if self.chunk_overlap is None else self.chunk_overlap  
         self.data_dir = DEFAULT_RETRIEVAL_DATA_PATH if self.data_dir is None else self.data_dir
         self.index_dir = DEFAULT_RETRIEVAL_STORAGE_PATH if self.index_dir is None else self.index_dir
-        
+        self.embedding_model_path = self.ensure_embedding_model(self.embedding_model_path)
         try:
-            self.embed_model = HuggingFaceEmbedding(model_name=DEFAULT_EMBEDDING_MODEL)
+            self.embed_model = HuggingFaceEmbedding(model_name=self.embedding_model_path)
         except Exception as e:
             print(f"模型加载失败: {DEFAULT_EMBEDDING_MODEL}")
         self.line_based_chunk = False if not hasattr(self, 'line_based_chunk') else self.line_based_chunk
@@ -153,7 +146,6 @@ class Retrieval:
         Settings.embed_model = self.embed_model
         Settings.chunk_size = self.chunk_size
         Settings.chunk_overlap = self.chunk_overlap
-    
 
         # 创建自定义节点解析器
         self.node_parser = SimpleNodeParser.from_defaults(
@@ -166,6 +158,22 @@ class Retrieval:
             self._initialize_bm25_index()
         except Exception as e:
             self.logger.error(f"初始化静态索引失败: {str(e)}")
+
+
+    def ensure_embedding_model(self, embedding_model_path: str = None):
+        model_path = Path(embedding_model_path)
+        if model_path.exists():
+            return str(embedding_model_path)
+        else:
+            model_path = Path(DEFAULT_EMBEDDING_MODEL)
+            if not model_path.exists():
+                # 如果模型不存在，使用 ModelScope 下载
+                from modelscope import snapshot_download
+                return snapshot_download(
+                    model_id='AI-ModelScope/bge-large-zh-v1.5',
+                    cache_dir=str(model_path.parent.parent)
+                )
+            return str(model_path)
 
 
     def line_based_chunking(self, text):
