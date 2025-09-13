@@ -21,11 +21,11 @@ import asyncio
 from contextvars import ContextVar
 import uuid
 
-from whoami.tool.agent.base_tool import tool
-from whoami.tool.agent.tool.enhance_retrieval import EnhanceRetrieval
-from whoami.llm_api.ollama_llm import OllamaLLM
-from whoami.configs.llm_config import LLMConfig
-from whoami.tool.agent.base_tool import BaseTool
+from ..base.base_tool import tool
+from .enhance_retrieval import EnhanceRetrieval
+from ..llm_api.ollama_llm import OllamaLLM
+from ..config.llm_config import LLMConfig
+from ..base.base_tool import BaseTool
 
 
 
