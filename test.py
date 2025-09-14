@@ -9,6 +9,7 @@ from .llm_api.ollama_llm import OllamaLLM
 from .config.llm_config import LLMConfig
 from .tool.order import Order
 from .tool.role import Role
+from .tool.planning_agent_community_ai_user import PlanningAgentCommunityAiUser
 
 
 async def main():
@@ -70,9 +71,19 @@ if __name__ == '__main__':
     client_service = ClientService()
     order = Order()
     role = Role()
-    planning_agent = FunctionCall(
-        tools = [client_service, order, role],
+    # planning_agent = FunctionCall(
+    #     tools = [client_service, order, role],
+    #     enhance_llm=enhance_qwen_admin,
+    # )
+    # asyncio.run(main())
+    planning_agent_user = PlanningAgentCommunityAiUser(
         enhance_llm=enhance_qwen_admin,
+        tools=[client_service]
     )
-    asyncio.run(main())
+    
+    print(planning_agent_user.tool_descs)
+    print("-----------------------------------------------------")
+    
+    
+    print(client_service.get_simple_tool_description())
     

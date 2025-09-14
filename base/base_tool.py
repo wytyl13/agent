@@ -222,13 +222,13 @@ class BaseTool(ABC, BaseModel):
         if hasattr(self, 'tool_schema'):
             # 从工具的schema中获取参数信息
             schema = self.tool_schema
-            properties = schema.get('parameters', {}).get('properties', {})
+            properties = schema.get('function', {}).get('parameters', {}).get('properties', {})
             
             params = []
             for param_name, param_info in properties.items():
                 # 尝试从不同的位置获取description
                 description = param_info.get('description', 
-                            param_info.get('title', f'参数 {param_name}'))
+                            param_info.get('name', f'参数 {param_name}'))
                 params.append(f'"{param_name}": "{description}"')
             
             if params:
