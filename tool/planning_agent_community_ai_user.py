@@ -137,10 +137,25 @@ class PlanningAgentCommunityAiUser:
         
         while True:
             # 1 格式化提示词并输入大语言模型
-            history = '\n'.join(['Question:%s\nAnswer:%s' % (his[0], his[1]) for his in chat_history])
+            print(f"history: --------------------------- {chat_history}")
+            print(f"history: --------------------------- {chat_history}")
+            print(f"history: --------------------------- {chat_history}")
+            history_parts = []
+            for i in range(0, len(chat_history), 2):
+                if (i + 1 < len(chat_history) and
+                    chat_history[i].get('role') == 'user' and 
+                    chat_history[i + 1].get('role') == 'assistant'):
+                    
+                    question = chat_history[i]['content']
+                    answer = chat_history[i + 1]['content']
+                    history_parts.append(f'Question:{question}\nAnswer:{answer}')
+
+            history = '\n'.join(history_parts)
+            # history = '\n'.join(['Question:%s\nAnswer:%s' % (his[0], his[1]) for his in chat_history])
             # 兼容qwen2.5和其他模型
             model_name = 'qwen2.5'
-            history = ';'.join(['Question:%s;Answer:%s' % (his[0], his[1]) for his in chat_history])
+            # history = ';'.join(['Question:%s\nAnswer:%s' % (his['content'] if his['role'] == 'user' else '', his['content'] if his['role'] == 'assistant' else '') for his in chat_history])
+            # history = ';'.join(['Question:%s;Answer:%s' % (his[0], his[1]) for his in chat_history])
             
             today = datetime.now().strftime('%Y-%m-%d')
             weekday_num = datetime.now().weekday()

@@ -93,6 +93,7 @@ class FunctionCall:
         self, 
         query, 
         messages,
+        is_ensure
     ):
         """
         query: str = "用户输入"
@@ -130,6 +131,7 @@ class FunctionCall:
                 tool_json = json.loads(tool_json_string)
                 tool_name = tool_json['name']
                 tool_arguments = tool_json['arguments']
+                tool_arguments["is_ensure"] = is_ensure
                 self.logger.info(f"function call parameters extracted information:----------------------\n{tool_name, tool_arguments}\n\n")
 
                 the_tool = None
@@ -146,7 +148,7 @@ class FunctionCall:
                         yield chunk
                 tool_result = ''.join(chunks)
                 self.logger.info(f"tool executed result:----------------------\n{tool_result}\n\n")
-                
+
                 if the_tool.end_flag == 0:
                     messages.append(
                         {"role": "function_call", "content": tool_json_string}
@@ -155,7 +157,7 @@ class FunctionCall:
                         {"role": "observation", "content": tool_result}
                     )
                     # 递归调用，继续处理
-                    async for chunk in self.agent_execute("", messages):
+                    async for chunk in self.agent_execute("", messages, is_ensure):
                         yield chunk
                 return
             else:
@@ -173,6 +175,7 @@ class FunctionCall:
         tools: Optional[list[any]] = None,
         question: str = None,
         messages: Optional[List] = None,
+        is_ensure: Optional[int] = 0
     ):
         if tools:
             self.tools = tools
@@ -184,6 +187,7 @@ class FunctionCall:
         async for chunk in self.agent_execute(
             query=question,
             messages=messages or [],
+            is_ensure=is_ensure
         ):
             yield chunk
 
