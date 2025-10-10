@@ -1163,6 +1163,103 @@ class Retrieval:
         )
 
 
+    def load_evaluation_table_enhanced(self, docx_path: str, verbose: bool = True) -> List[Dict[str, str]]:
+        """
+        增强版：同时支持行内查询和交叉查询
+        
+        适用场景：
+        - "B4.1的分数" （交叉查询）
+        - "B4.1的所有数据" （行内查询）
+        - "分数的所有项" （列查询）
+        """
+        text_list = []
+        
+        try:
+            if not Path(docx_path).exists():
+                print(f"❌ 文件不存在: {docx_path}")
+                return text_list
+            
+            doc = DocxDocument(docx_path)
+            
+            # 提取段落
+            for idx, paragraph in enumerate(doc.paragraphs):
+                text = paragraph.text.strip()
+                if len(text) >= 5:
+                    text_id = f"para_{idx}"
+                    text_list.append({text_id: text})
+            
+            # 提取表格
+            for table_idx, table in enumerate(doc.tables):
+                if len(table.rows) < 2:
+                    continue
+                
+                headers = [cell.text.strip() for cell in table.rows[0].cells]
+                
+                # ===== 策略1：交叉引用（用于"B4.1的分数"） =====
+                for row_idx, row in enumerate(table.rows[1:], start=1):
+                    row_label = row.cells[0].text.strip()
+                    
+                    for col_idx in range(1, len(row.cells)):
+                        if col_idx >= len(headers):
+                            continue
+                        
+                        col_header = headers[col_idx]
+                        cell_value = row.cells[col_idx].text.strip()
+                        
+                        if cell_value:
+                            expressions = [
+                                f"{col_header}的{row_label}是{cell_value}",
+                                f"{row_label}在{col_header}中的值为{cell_value}",
+                                f"{col_header} {row_label}: {cell_value}",
+                            ]
+                            
+                            text_id = f"t{table_idx}_cross_r{row_idx}_c{col_idx}"
+                            text_list.append({text_id: " | ".join(expressions)})
+                
+                # ===== 策略2：列聚合（用于"B4.1的所有数据"） =====
+                for col_idx in range(1, len(headers)):
+                    col_header = headers[col_idx]
+                    col_items = []
+                    
+                    for row in table.rows[1:]:
+                        if col_idx < len(row.cells):
+                            row_label = row.cells[0].text.strip()
+                            cell_value = row.cells[col_idx].text.strip()
+                            if cell_value:
+                                col_items.append(f"{row_label}: {cell_value}")
+                    
+                    if col_items:
+                        combined = f"{col_header}的完整数据 | " + " | ".join(col_items)
+                        text_id = f"t{table_idx}_col_{col_idx}_{col_header}"
+                        text_list.append({text_id: combined})
+                
+                # ===== 策略3：行聚合（用于"分数这一行"） =====
+                for row_idx, row in enumerate(table.rows[1:], start=1):
+                    row_label = row.cells[0].text.strip()
+                    row_items = []
+                    
+                    for col_idx in range(1, len(row.cells)):
+                        if col_idx < len(headers):
+                            cell_value = row.cells[col_idx].text.strip()
+                            if cell_value:
+                                row_items.append(f"{headers[col_idx]}: {cell_value}")
+                    
+                    if row_items:
+                        combined = f"{row_label}的完整数据 | " + " | ".join(row_items)
+                        text_id = f"t{table_idx}_row_{row_idx}_{row_label}"
+                        text_list.append({text_id: combined})
+            
+            if verbose:
+                print(f"✅ 总共提取了 {len(text_list)} 个文本项")
+        
+        except Exception as e:
+            print(f"❌ 提取失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        
+        return text_list
+
+
 if __name__ == '__main__':
     from docx import Document as DocxDocument
     # 测试用例
