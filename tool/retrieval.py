@@ -33,6 +33,12 @@ from llama_index.core import QueryBundle
 from rank_bm25 import BM25Okapi
 from pathlib import Path
 from tqdm.auto import tqdm as TqdmProgress
+from typing import Union
+from docx import Document as DocxDocument
+from io import BytesIO
+from pathlib import Path
+from typing import Union, List, Dict
+import re
 
 from ..base.base_tool import tool
 from ..utils.utils import Utils
@@ -1163,94 +1169,207 @@ class Retrieval:
         )
 
 
-    def load_evaluation_table_enhanced(self, docx_path: str, verbose: bool = True) -> List[Dict[str, str]]:
+    def load_evaluation_table_enhanced(
+        self, 
+        docx_input: Union[str, bytes], 
+        use_cross_ref: bool = True,      # 交叉引用策略
+        use_col_aggregate: bool = False, # 列聚合策略（默认关闭减少重复）
+        use_row_aggregate: bool = False, # 行聚合策略（默认关闭减少重复）
+        verbose: bool = True
+    ) -> List[Dict[str, str]]:
         """
-        增强版：同时支持行内查询和交叉查询
+        增强版：支持文件路径或二进制数据，并智能去重
+        
+        Args:
+            docx_input: 文件路径(str) 或 二进制内容(bytes)
+            use_cross_ref: 是否使用交叉引用策略（适用于"B4.1的分数"类查询）
+            use_col_aggregate: 是否使用列聚合策略（适用于"分数的所有项"类查询）
+            use_row_aggregate: 是否使用行聚合策略（适用于"B4.1的所有数据"类查询）
+            verbose: 是否打印日志
+        
+        Returns:
+            去重后的文本列表
         
         适用场景：
-        - "B4.1的分数" （交叉查询）
-        - "B4.1的所有数据" （行内查询）
-        - "分数的所有项" （列查询）
+            - "B4.1的分数" (交叉查询) → use_cross_ref=True
+            - "B4.1的所有数据" (行内查询) → use_row_aggregate=True
+            - "分数的所有项" (列查询) → use_col_aggregate=True
         """
         text_list = []
+        seen_content: Set[str] = set()  # 用于去重的集合
+        duplicate_count = 0  # 统计重复数量
+        
+        def normalize_text(text: str) -> str:
+            """标准化文本用于去重比较"""
+            # 移除所有空白字符
+            text = re.sub(r'\s+', '', text)
+            # 移除分隔符
+            text = text.replace('|', '').replace(':', '').replace('：', '')
+            # 转小写
+            text = text.lower()
+            return text
+        
+        def add_unique_text(text_id: str, text_content: str) -> bool:
+            """只添加唯一的内容，返回是否成功添加"""
+            nonlocal duplicate_count
+            
+            if not text_content or not text_content.strip():
+                return False
+            
+            # 标准化内容用于比较
+            normalized = normalize_text(text_content)
+            
+            if normalized not in seen_content:
+                seen_content.add(normalized)
+                text_list.append({text_id: text_content})
+                return True
+            else:
+                duplicate_count += 1
+                if verbose:
+                    print(f"  🔄 跳过重复: {text_content[:50]}...")
+                return False
         
         try:
-            if not Path(docx_path).exists():
-                print(f"❌ 文件不存在: {docx_path}")
-                return text_list
+            # ============ 1. 加载文档 ============
+            if isinstance(docx_input, bytes):
+                # 二进制数据：用 BytesIO 包装
+                doc = DocxDocument(BytesIO(docx_input))
+                if verbose:
+                    print(f"📥 从二进制数据加载 (大小: {len(docx_input)} bytes)")
             
-            doc = DocxDocument(docx_path)
+            elif isinstance(docx_input, str):
+                # 文件路径
+                if not Path(docx_input).exists():
+                    print(f"❌ 文件不存在: {docx_input}")
+                    return text_list
+                doc = DocxDocument(docx_input)
+                if verbose:
+                    print(f"📂 从文件加载: {docx_input}")
             
-            # 提取段落
+            else:
+                raise TypeError(f"不支持的输入类型: {type(docx_input)}")
+            
+            # ============ 2. 提取段落 ============
+            if verbose:
+                print(f"\n📄 开始提取段落...")
+            
+            para_count = 0
             for idx, paragraph in enumerate(doc.paragraphs):
                 text = paragraph.text.strip()
                 if len(text) >= 5:
                     text_id = f"para_{idx}"
-                    text_list.append({text_id: text})
-            
-            # 提取表格
-            for table_idx, table in enumerate(doc.tables):
-                if len(table.rows) < 2:
-                    continue
-                
-                headers = [cell.text.strip() for cell in table.rows[0].cells]
-                
-                # ===== 策略1：交叉引用（用于"B4.1的分数"） =====
-                for row_idx, row in enumerate(table.rows[1:], start=1):
-                    row_label = row.cells[0].text.strip()
-                    
-                    for col_idx in range(1, len(row.cells)):
-                        if col_idx >= len(headers):
-                            continue
-                        
-                        col_header = headers[col_idx]
-                        cell_value = row.cells[col_idx].text.strip()
-                        
-                        if cell_value:
-                            expressions = [
-                                f"{col_header}的{row_label}是{cell_value}",
-                                f"{row_label}在{col_header}中的值为{cell_value}",
-                                f"{col_header} {row_label}: {cell_value}",
-                            ]
-                            
-                            text_id = f"t{table_idx}_cross_r{row_idx}_c{col_idx}"
-                            text_list.append({text_id: " | ".join(expressions)})
-                
-                # ===== 策略2：列聚合（用于"B4.1的所有数据"） =====
-                for col_idx in range(1, len(headers)):
-                    col_header = headers[col_idx]
-                    col_items = []
-                    
-                    for row in table.rows[1:]:
-                        if col_idx < len(row.cells):
-                            row_label = row.cells[0].text.strip()
-                            cell_value = row.cells[col_idx].text.strip()
-                            if cell_value:
-                                col_items.append(f"{row_label}: {cell_value}")
-                    
-                    if col_items:
-                        combined = f"{col_header}的完整数据 | " + " | ".join(col_items)
-                        text_id = f"t{table_idx}_col_{col_idx}_{col_header}"
-                        text_list.append({text_id: combined})
-                
-                # ===== 策略3：行聚合（用于"分数这一行"） =====
-                for row_idx, row in enumerate(table.rows[1:], start=1):
-                    row_label = row.cells[0].text.strip()
-                    row_items = []
-                    
-                    for col_idx in range(1, len(row.cells)):
-                        if col_idx < len(headers):
-                            cell_value = row.cells[col_idx].text.strip()
-                            if cell_value:
-                                row_items.append(f"{headers[col_idx]}: {cell_value}")
-                    
-                    if row_items:
-                        combined = f"{row_label}的完整数据 | " + " | ".join(row_items)
-                        text_id = f"t{table_idx}_row_{row_idx}_{row_label}"
-                        text_list.append({text_id: combined})
+                    if add_unique_text(text_id, text):
+                        para_count += 1
             
             if verbose:
-                print(f"✅ 总共提取了 {len(text_list)} 个文本项")
+                print(f"✅ 提取了 {para_count} 个唯一段落")
+            
+            # ============ 3. 提取表格 ============
+            if verbose:
+                print(f"\n📊 开始提取表格...")
+            
+            for table_idx, table in enumerate(doc.tables):
+                if len(table.rows) < 2:
+                    if verbose:
+                        print(f"  ⚠️  表格 {table_idx} 只有 {len(table.rows)} 行，跳过")
+                    continue
+                
+                # 提取表头
+                headers = [cell.text.strip() for cell in table.rows[0].cells]
+                
+                if verbose:
+                    print(f"\n  表格 {table_idx}: {len(table.rows)-1} 行 x {len(headers)} 列")
+                    print(f"  表头: {headers}")
+                
+                cross_count = 0
+                col_count = 0
+                row_count = 0
+                
+                # ===== 策略1：交叉引用 =====
+                if use_cross_ref:
+                    if verbose:
+                        print(f"    🔀 应用策略1: 交叉引用")
+                    
+                    for row_idx, row in enumerate(table.rows[1:], start=1):
+                        row_label = row.cells[0].text.strip()
+                        
+                        for col_idx in range(1, len(row.cells)):
+                            if col_idx >= len(headers):
+                                continue
+                            
+                            col_header = headers[col_idx]
+                            cell_value = row.cells[col_idx].text.strip()
+                            
+                            if cell_value:
+                                # 使用最简洁的表达方式
+                                expression = f"{col_header}的{row_label}是{cell_value}"
+                                text_id = f"t{table_idx}_cross_r{row_idx}_c{col_idx}"
+                                
+                                if add_unique_text(text_id, expression):
+                                    cross_count += 1
+                    
+                    if verbose:
+                        print(f"      ✓ 添加了 {cross_count} 个交叉引用项")
+                
+                # ===== 策略2：列聚合 =====
+                if use_col_aggregate:
+                    if verbose:
+                        print(f"    📋 应用策略2: 列聚合")
+                    
+                    for col_idx in range(1, len(headers)):
+                        col_header = headers[col_idx]
+                        col_items = []
+                        
+                        for row in table.rows[1:]:
+                            if col_idx < len(row.cells):
+                                row_label = row.cells[0].text.strip()
+                                cell_value = row.cells[col_idx].text.strip()
+                                if cell_value:
+                                    col_items.append(f"{row_label}: {cell_value}")
+                        
+                        if col_items:
+                            combined = f"{col_header}的完整数据 | " + " | ".join(col_items)
+                            text_id = f"t{table_idx}_col_{col_idx}_{col_header}"
+                            
+                            if add_unique_text(text_id, combined):
+                                col_count += 1
+                    
+                    if verbose:
+                        print(f"      ✓ 添加了 {col_count} 个列聚合项")
+                
+                # ===== 策略3：行聚合 =====
+                if use_row_aggregate:
+                    if verbose:
+                        print(f"    📊 应用策略3: 行聚合")
+                    
+                    for row_idx, row in enumerate(table.rows[1:], start=1):
+                        row_label = row.cells[0].text.strip()
+                        row_items = []
+                        
+                        for col_idx in range(1, len(row.cells)):
+                            if col_idx < len(headers):
+                                cell_value = row.cells[col_idx].text.strip()
+                                if cell_value:
+                                    row_items.append(f"{headers[col_idx]}: {cell_value}")
+                        
+                        if row_items:
+                            combined = f"{row_label}的完整数据 | " + " | ".join(row_items)
+                            text_id = f"t{table_idx}_row_{row_idx}_{row_label}"
+                            
+                            if add_unique_text(text_id, combined):
+                                row_count += 1
+                    
+                    if verbose:
+                        print(f"      ✓ 添加了 {row_count} 个行聚合项")
+            
+            # ============ 4. 总结 ============
+            if verbose:
+                print(f"\n{'='*60}")
+                print(f"✅ 提取完成!")
+                print(f"   📝 总计提取: {len(text_list)} 个唯一文本项")
+                print(f"   🔄 跳过重复: {duplicate_count} 项")
+                print(f"   💾 去重率: {duplicate_count/(len(text_list)+duplicate_count)*100:.1f}%" if (len(text_list)+duplicate_count) > 0 else "   💾 去重率: 0%")
+                print(f"{'='*60}\n")
         
         except Exception as e:
             print(f"❌ 提取失败: {str(e)}")
@@ -1267,104 +1386,6 @@ if __name__ == '__main__':
     #     {"dynamic_1": "我是卫宇涛，我28岁，我来自山西运城"}, 
     #     {"dynamic_2": "我们公司地址在山西省运城市万荣县科创城"}, 
     # ]
-    
-    
-    def load_evaluation_table_enhanced(docx_path: str, verbose: bool = True) -> List[Dict[str, str]]:
-        """
-        增强版：同时支持行内查询和交叉查询
-        
-        适用场景：
-        - "B4.1的分数" （交叉查询）
-        - "B4.1的所有数据" （行内查询）
-        - "分数的所有项" （列查询）
-        """
-        text_list = []
-        
-        try:
-            if not Path(docx_path).exists():
-                print(f"❌ 文件不存在: {docx_path}")
-                return text_list
-            
-            doc = DocxDocument(docx_path)
-            
-            # 提取段落
-            for idx, paragraph in enumerate(doc.paragraphs):
-                text = paragraph.text.strip()
-                if len(text) >= 5:
-                    text_id = f"para_{idx}"
-                    text_list.append({text_id: text})
-            
-            # 提取表格
-            for table_idx, table in enumerate(doc.tables):
-                if len(table.rows) < 2:
-                    continue
-                
-                headers = [cell.text.strip() for cell in table.rows[0].cells]
-                
-                # ===== 策略1：交叉引用（用于"B4.1的分数"） =====
-                for row_idx, row in enumerate(table.rows[1:], start=1):
-                    row_label = row.cells[0].text.strip()
-                    
-                    for col_idx in range(1, len(row.cells)):
-                        if col_idx >= len(headers):
-                            continue
-                        
-                        col_header = headers[col_idx]
-                        cell_value = row.cells[col_idx].text.strip()
-                        
-                        if cell_value:
-                            expressions = [
-                                f"{col_header}的{row_label}是{cell_value}",
-                                f"{row_label}在{col_header}中的值为{cell_value}",
-                                f"{col_header} {row_label}: {cell_value}",
-                            ]
-                            
-                            text_id = f"t{table_idx}_cross_r{row_idx}_c{col_idx}"
-                            text_list.append({text_id: " | ".join(expressions)})
-                
-                # ===== 策略2：列聚合（用于"B4.1的所有数据"） =====
-                for col_idx in range(1, len(headers)):
-                    col_header = headers[col_idx]
-                    col_items = []
-                    
-                    for row in table.rows[1:]:
-                        if col_idx < len(row.cells):
-                            row_label = row.cells[0].text.strip()
-                            cell_value = row.cells[col_idx].text.strip()
-                            if cell_value:
-                                col_items.append(f"{row_label}: {cell_value}")
-                    
-                    if col_items:
-                        combined = f"{col_header}的完整数据 | " + " | ".join(col_items)
-                        text_id = f"t{table_idx}_col_{col_idx}_{col_header}"
-                        text_list.append({text_id: combined})
-                
-                # ===== 策略3：行聚合（用于"分数这一行"） =====
-                for row_idx, row in enumerate(table.rows[1:], start=1):
-                    row_label = row.cells[0].text.strip()
-                    row_items = []
-                    
-                    for col_idx in range(1, len(row.cells)):
-                        if col_idx < len(headers):
-                            cell_value = row.cells[col_idx].text.strip()
-                            if cell_value:
-                                row_items.append(f"{headers[col_idx]}: {cell_value}")
-                    
-                    if row_items:
-                        combined = f"{row_label}的完整数据 | " + " | ".join(row_items)
-                        text_id = f"t{table_idx}_row_{row_idx}_{row_label}"
-                        text_list.append({text_id: combined})
-            
-            if verbose:
-                print(f"✅ 总共提取了 {len(text_list)} 个文本项")
-        
-        except Exception as e:
-            print(f"❌ 提取失败: {str(e)}")
-            import traceback
-            traceback.print_exc()
-        
-        return text_list
-    
     
     
     
