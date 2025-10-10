@@ -1395,7 +1395,13 @@ if __name__ == '__main__':
         line_based_chunk=False
     )
     # text_list = load_evaluation_table_enhanced(docx_path="/work/ai/agent/retrieval_data/pinggu.docx")
-    text_list = load_evaluation_table_enhanced(docx_path="/work/ai/agent/retrieval_data/shunxikeji.docx")
+    text_list = retrieval.load_evaluation_table_enhanced(
+        docx_path="/work/ai/agent/retrieval_data/shunxikeji.docx",
+        use_cross_ref=True,
+        use_col_aggregate=True,
+        use_row_aggregate=True,
+        verbose=True
+    )
     print(text_list)
     async def test_retrieval():
         # 测试1：纯动态检索
