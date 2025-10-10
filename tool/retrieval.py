@@ -42,32 +42,26 @@ utils = Utils()
 MODELS_DIR_NAME = 'models'
 RETRIEVAL_DATA_DIR_NAME = 'retrieval_data'
 RETRIEVAL_STORAGE_DIR_NAME = 'retrieval_storage'
-
+AGENT_DIRECTORY = Path(__file__).parent.parent 
 
 environment = utils.load_project_env()
-MODELS_DIRECTORY = utils.get_directory(MODELS_DIR_NAME) if "MODEL_PATH" not in environment else Path(environment["MODEL_PATH"])
+# MODELS_DIRECTORY = str(AGENT_DIRECTORY / MODELS_DIR_NAME)
 RETRIEVAL_DATA_DIRECTORY = utils.get_directory(RETRIEVAL_DATA_DIR_NAME)
 RETRIEVAL_STORAGE_DIRECTORY = utils.get_directory(RETRIEVAL_STORAGE_DIR_NAME)
 
-
+# print(f"MODELS_DIRECTORY: {MODELS_DIRECTORY}")
 
 
 DEFAULT_RETRIEVAL_DATA_PATH = str(RETRIEVAL_DATA_DIRECTORY) if "RETRIEVAL_DATA_PATH" not in environment else environment["RETRIEVAL_DATA_PATH"]
 DEFAULT_RETRIEVAL_STORAGE_PATH = str(RETRIEVAL_STORAGE_DIRECTORY) if "RETRIEVAL_STORAGE_PATH" not in environment else environment["RETRIEVAL_STORAGE_PATH"]
-DEFAULT_EMBEDDING_MODEL = str(MODELS_DIRECTORY / "embedding" / "AI-ModelScope" / "bge-large-zh-v1.5")
-
-
-
-
-
-
+DEFAULT_EMBEDDING_MODEL = str(AGENT_DIRECTORY / MODELS_DIR_NAME / "embedding" / "AI-ModelScope" / "bge-large-zh-v1.5")
+print(f"DEFAULT_EMBEDDING_MODEL: --------------------------- {DEFAULT_EMBEDDING_MODEL}")
 
 class RetrievalSchema(BaseModel):
     retrieval_word: str = Field(
         ...,  # 使用 ... 表示必填字段
         description="检索关键词，一般为用户的问题"
     )
-
 
 
 class StrEnum(str, Enum):
@@ -79,13 +73,10 @@ class StrEnum(str, Enum):
         return f"'{str(self)}'"
 
 
-
 class RankType(StrEnum):
     """Rank type"""
     reciprocal_rank_fusion = "reciprocal_rank_fusion"
 
-
-  
 
 @tool
 class Retrieval:
@@ -149,8 +140,8 @@ class Retrieval:
 
         # 创建自定义节点解析器
         self.node_parser = SimpleNodeParser.from_defaults(
-            chunk_size=512,       # 自定义块大小
-            chunk_overlap=50      # 自定义重叠大小
+            chunk_size=self.chunk_size,       # 自定义块大小
+            chunk_overlap=self.chunk_overlap      # 自定义重叠大小
         ) if self.node_parser is None else self.node_parser
         
         try:
@@ -160,10 +151,55 @@ class Retrieval:
             self.logger.error(f"初始化静态索引失败: {str(e)}")
 
 
+    def _process_documents_unified(
+        self, 
+        text_list: List[Dict[str, str]], 
+        source_type: str = "dynamic"
+    ) -> List[Document]:
+        """
+        统一的文档处理方法（动态和静态使用相同逻辑）
+        """
+        documents = []
+        
+        for item in text_list:
+            source_key = list(item.keys())[0]
+            text_content = list(item.values())[0]
+            
+            # 关键：使用与静态索引相同的处理逻辑
+            if self.line_based_chunk:
+                chunks = self.line_based_chunking(text_content)
+                for i, chunk in enumerate(chunks):
+                    doc = Document(
+                        text=chunk,
+                        metadata={
+                            "source": source_key,
+                            "original_source": source_key,
+                            "type": source_type,
+                            "text_id": source_key,
+                            "chunk_id": i
+                        }
+                    )
+                    documents.append(doc)
+            else:
+                doc = Document(
+                    text=text_content,
+                    metadata={
+                        "source": source_key,
+                        "original_source": source_key,
+                        "type": source_type,
+                        "text_id": source_key
+                    }
+                )
+                documents.append(doc)
+        
+        return documents
+
+
     def ensure_embedding_model(self, embedding_model_path: str = None):
-        model_path = Path(embedding_model_path)
-        if model_path.exists():
-            return str(embedding_model_path)
+        if embedding_model_path:
+            model_path = Path(embedding_model_path)
+            if model_path.exists():
+                return str(embedding_model_path)
         else:
             model_path = Path(DEFAULT_EMBEDDING_MODEL)
             if not model_path.exists():
@@ -479,6 +515,46 @@ class Retrieval:
 
 
     def store_index(self, text_list: List[Dict[str, str]]):
+        """
+        创建动态索引（使用统一的文档处理流程 + 稳定ID）
+        """
+        try:
+            import hashlib
+            
+            # 使用统一的处理方法
+            documents = self._process_documents_unified(text_list, source_type="dynamic")
+            
+            # 使用相同的node_parser解析
+            nodes = self.node_parser.get_nodes_from_documents(documents)
+            
+            # 为每个节点生成稳定的ID
+            for node in nodes:
+                if "type" not in node.metadata:
+                    node.metadata["type"] = "dynamic"
+                
+                # 生成确定性ID（基于内容hash + metadata）
+                text_id = node.metadata.get("text_id", "unknown")
+                chunk_id = node.metadata.get("chunk_id", 0)
+                content_hash = hashlib.md5(node.text.encode()).hexdigest()[:8]
+                
+                # 格式：dynamic_{text_id}_{content_hash}_{chunk_id}
+                stable_id = f"dynamic_{text_id}_{content_hash}_{chunk_id}"
+                node.id_ = stable_id
+                
+                self.logger.debug(f"为节点分配稳定ID: {stable_id}")
+            
+            # 创建索引
+            index = VectorStoreIndex(nodes)
+            
+            return index
+        except Exception as e:
+            self.logger.error(f"Fail to exec store index function, {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return None
+
+
+    def store_index_bake(self, text_list: List[Dict[str, str]]):
         try:
             documents = []
             for item in text_list:
@@ -503,6 +579,48 @@ class Retrieval:
     
     
     def vector_retrieval(
+        self, 
+        retrieval_word: str = None, 
+        text_list: List[Dict[str, str]] = None, 
+        top_k: int = 3,
+        static_flag: int = 1
+    ):
+        """
+        向量检索（使用统一的文档处理）
+        """
+        results = []
+        
+        # 处理动态文本
+        if text_list:
+            try:
+                dynamic_index = self.store_index(text_list)  # 已经使用统一处理了
+                if dynamic_index:
+                    dynamic_retriever = dynamic_index.as_retriever(similarity_top_k=top_k)
+                    dynamic_nodes = dynamic_retriever.retrieve(retrieval_word)
+                    results.extend(dynamic_nodes)
+                    self.logger.info(f"动态向量检索结果数: {len(dynamic_nodes)}")
+            except Exception as e:
+                self.logger.error(f"从动态文本检索失败: {str(e)}")
+
+        # 从静态索引中检索
+        if static_flag != 0:
+            try:
+                if self.static_index is None:
+                    self.logger.info("静态索引未初始化，尝试重新初始化...")
+                    self.initialize_static_index()
+                    
+                if self.static_index:
+                    static_retriever = self.static_index.as_retriever(similarity_top_k=top_k)
+                    static_nodes = static_retriever.retrieve(retrieval_word)
+                    results.extend(static_nodes)
+                    self.logger.info(f"静态向量检索结果数: {len(static_nodes)}")
+            except Exception as static_err:
+                self.logger.error(f"从静态索引检索失败: {str(static_err)}")
+        
+        return results
+    
+    
+    def vector_retrieval_bake(
         self, 
         retrieval_word: str = None, 
         text_list: List[Dict[str, str]] = None, 
@@ -679,6 +797,93 @@ class Retrieval:
         static_flag: int = 1
     ):
         """
+        使用BM25算法进行关键词检索（合并corpus版本）
+        """
+        import hashlib  # 添加这一行
+        
+        results = []
+        tokenized_query = list(jieba.cut(retrieval_word))
+        
+        all_corpus = []
+        all_nodes = []
+        
+        # 1. 先加载静态corpus和nodes
+        if static_flag != 0 and self.static_index is not None:
+            try:
+                if hasattr(self, 'static_corpus') and hasattr(self, 'static_nodes'):
+                    all_corpus.extend(self.static_corpus)
+                    all_nodes.extend(self.static_nodes)
+                    self.logger.info(f"加载静态corpus: {len(self.static_corpus)} 个文档")
+            except Exception as e:
+                self.logger.error(f"加载静态corpus失败: {str(e)}")
+        
+        # 2. 处理动态文本并添加到corpus
+        if text_list:
+            try:
+                documents = self._process_documents_unified(text_list, source_type="dynamic")
+                dynamic_nodes = self.node_parser.get_nodes_from_documents(documents)
+                
+                # ===== 关键修改：为动态节点分配稳定ID =====
+                for node in dynamic_nodes:
+                    # 生成确定性ID
+                    text_id = node.metadata.get("text_id", "unknown")
+                    chunk_id = node.metadata.get("chunk_id", 0)
+                    content_hash = hashlib.md5(node.text.encode()).hexdigest()[:8]
+                    
+                    stable_id = f"dynamic_{text_id}_{content_hash}_{chunk_id}"
+                    node.id_ = stable_id
+                    
+                    # 分词
+                    tokens = list(jieba.cut(node.text))
+                    all_corpus.append(tokens)
+                    all_nodes.append(node)
+                
+                self.logger.info(f"添加动态文档: {len(dynamic_nodes)} 个")
+            except Exception as e:
+                self.logger.error(f"处理动态文本失败: {str(e)}")
+                import traceback
+                self.logger.error(traceback.format_exc())
+        
+        # 3. 如果没有任何文档，直接返回
+        if len(all_corpus) == 0:
+            self.logger.warning("没有可检索的文档")
+            return results
+        
+        # 4-7. 后续逻辑保持不变
+        try:
+            self.logger.info(f"创建BM25索引，总文档数: {len(all_corpus)}")
+            bm25 = BM25Okapi(all_corpus)
+            scores = bm25.get_scores(tokenized_query)
+            
+            for i, score in enumerate(scores):
+                if i < len(all_nodes):
+                    results.append(NodeWithScore(
+                        node=all_nodes[i],
+                        score=float(score)
+                    ))
+            
+            self.logger.info(f"BM25检索结果数: {len(results)}")
+            results.sort(key=lambda x: x.score, reverse=True)
+            
+            for i, result in enumerate(results[:3]):
+                self.logger.info(f"Top {i+1} - 分数: {result.score:.4f}, ID: {result.node.id_}, 类型: {result.node.metadata.get('type', 'unknown')}, 文本: {result.node.text[:50]}...")
+            
+        except Exception as e:
+            self.logger.error(f"BM25检索失败: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+        
+        return results
+
+    
+    
+    def keyword_retrieval_bake(self, 
+        retrieval_word: str = None, 
+        text_list: List[Dict[str, str]] = None, 
+        top_k: int = 3,
+        static_flag: int = 1
+    ):
+        """
         使用BM25算法进行关键词检索
         """
         
@@ -758,7 +963,78 @@ class Retrieval:
         return results
 
 
+    
     def reciprocal_rank_fusion(self, vector_results, bm25_results, k=60, top_k=3):
+        """
+        实现RRF (Reciprocal Rank Fusion) - 改进去重版本
+        """
+        import hashlib
+        
+        results_map = {}
+        
+        # 处理向量检索结果
+        for i, node in enumerate(vector_results):
+            # 优先使用稳定的node.id_，如果没有则用text的hash
+            if hasattr(node.node, 'id_') and node.node.id_:
+                key = node.node.id_
+            else:
+                # 使用text + metadata生成唯一key
+                text_id = node.node.metadata.get("text_id", "")
+                key = hashlib.md5(f"{node.node.text}_{text_id}".encode()).hexdigest()
+            
+            rank = i + 1
+            results_map[key] = {
+                'node': node.node,
+                'score': 1.0 / (k + rank),
+                'source': 'vector',
+                'vector_rank': rank
+            }
+            self.logger.debug(f"Vector - Rank {rank}, Key: {key[:16]}..., 文本: {node.node.text[:30]}...")
+        
+        # 处理BM25检索结果
+        for i, node in enumerate(bm25_results):
+            if hasattr(node.node, 'id_') and node.node.id_:
+                key = node.node.id_
+            else:
+                text_id = node.node.metadata.get("text_id", "")
+                key = hashlib.md5(f"{node.node.text}_{text_id}".encode()).hexdigest()
+            
+            rank = i + 1
+            
+            if key in results_map:
+                # 累加RRF分数
+                results_map[key]['score'] += 1.0 / (k + rank)
+                results_map[key]['source'] = 'both'
+                results_map[key]['bm25_rank'] = rank
+                self.logger.debug(f"BM25 - Rank {rank}, Key: {key[:16]}... (合并到已有结果)")
+            else:
+                results_map[key] = {
+                    'node': node.node,
+                    'score': 1.0 / (k + rank),
+                    'source': 'bm25',
+                    'bm25_rank': rank
+                }
+                self.logger.debug(f"BM25 - Rank {rank}, Key: {key[:16]}..., 文本: {node.node.text[:30]}...")
+        
+        # 生成最终结果
+        final_results = [
+            NodeWithScore(node=item['node'], score=item['score'])
+            for item in results_map.values()
+        ]
+        
+        # 按分数排序
+        final_results.sort(key=lambda x: x.score, reverse=True)
+        
+        # 记录融合信息
+        self.logger.info(f"RRF融合: 向量结果{len(vector_results)}个 + BM25结果{len(bm25_results)}个 → 去重后{len(final_results)}个")
+        for i, result in enumerate(final_results[:top_k]):
+            source_info = results_map.get(result.node.id_, {}).get('source', 'unknown')
+            self.logger.info(f"融合Top {i+1} - 分数: {result.score:.4f}, 来源: {source_info}, 类型: {result.node.metadata.get('type', 'unknown')}")
+        
+        return final_results[:top_k]
+    
+    
+    def reciprocal_rank_fusion_bake(self, vector_results, bm25_results, k=60, top_k=3):
         """
         实现RRF (Reciprocal Rank Fusion)
         
@@ -888,38 +1164,140 @@ class Retrieval:
 
 
 if __name__ == '__main__':
-    text_list = [
-        {"123": "我是卫宇涛，我28，我来自山西运城"}, 
-        {"456": "我们公司地址在山西省运城市万荣县科创城"}, 
-        {"789": "我是卫jin涛，30岁，来自山西运城"},
-        {"1011": "我是卫jin涛，30岁，来自山西运城"},
-        {"1012": "我是卫jin涛，30岁，来自山西运城"},
-        {"1013": "我是卫jin涛，30岁，来自山西运城"},
-        {"1014": "我是卫jin涛，30岁，来自山西运城"},
-    ]
-    text_list = []
+    from docx import Document as DocxDocument
+    # 测试用例
+    # text_list = [
+    #     {"dynamic_1": "我是卫宇涛，我28岁，我来自山西运城"}, 
+    #     {"dynamic_2": "我们公司地址在山西省运城市万荣县科创城"}, 
+    # ]
+    
+    
+    def load_evaluation_table_enhanced(docx_path: str, verbose: bool = True) -> List[Dict[str, str]]:
+        """
+        增强版：同时支持行内查询和交叉查询
+        
+        适用场景：
+        - "B4.1的分数" （交叉查询）
+        - "B4.1的所有数据" （行内查询）
+        - "分数的所有项" （列查询）
+        """
+        text_list = []
+        
+        try:
+            if not Path(docx_path).exists():
+                print(f"❌ 文件不存在: {docx_path}")
+                return text_list
+            
+            doc = DocxDocument(docx_path)
+            
+            # 提取段落
+            for idx, paragraph in enumerate(doc.paragraphs):
+                text = paragraph.text.strip()
+                if len(text) >= 5:
+                    text_id = f"para_{idx}"
+                    text_list.append({text_id: text})
+            
+            # 提取表格
+            for table_idx, table in enumerate(doc.tables):
+                if len(table.rows) < 2:
+                    continue
+                
+                headers = [cell.text.strip() for cell in table.rows[0].cells]
+                
+                # ===== 策略1：交叉引用（用于"B4.1的分数"） =====
+                for row_idx, row in enumerate(table.rows[1:], start=1):
+                    row_label = row.cells[0].text.strip()
+                    
+                    for col_idx in range(1, len(row.cells)):
+                        if col_idx >= len(headers):
+                            continue
+                        
+                        col_header = headers[col_idx]
+                        cell_value = row.cells[col_idx].text.strip()
+                        
+                        if cell_value:
+                            expressions = [
+                                f"{col_header}的{row_label}是{cell_value}",
+                                f"{row_label}在{col_header}中的值为{cell_value}",
+                                f"{col_header} {row_label}: {cell_value}",
+                            ]
+                            
+                            text_id = f"t{table_idx}_cross_r{row_idx}_c{col_idx}"
+                            text_list.append({text_id: " | ".join(expressions)})
+                
+                # ===== 策略2：列聚合（用于"B4.1的所有数据"） =====
+                for col_idx in range(1, len(headers)):
+                    col_header = headers[col_idx]
+                    col_items = []
+                    
+                    for row in table.rows[1:]:
+                        if col_idx < len(row.cells):
+                            row_label = row.cells[0].text.strip()
+                            cell_value = row.cells[col_idx].text.strip()
+                            if cell_value:
+                                col_items.append(f"{row_label}: {cell_value}")
+                    
+                    if col_items:
+                        combined = f"{col_header}的完整数据 | " + " | ".join(col_items)
+                        text_id = f"t{table_idx}_col_{col_idx}_{col_header}"
+                        text_list.append({text_id: combined})
+                
+                # ===== 策略3：行聚合（用于"分数这一行"） =====
+                for row_idx, row in enumerate(table.rows[1:], start=1):
+                    row_label = row.cells[0].text.strip()
+                    row_items = []
+                    
+                    for col_idx in range(1, len(row.cells)):
+                        if col_idx < len(headers):
+                            cell_value = row.cells[col_idx].text.strip()
+                            if cell_value:
+                                row_items.append(f"{headers[col_idx]}: {cell_value}")
+                    
+                    if row_items:
+                        combined = f"{row_label}的完整数据 | " + " | ".join(row_items)
+                        text_id = f"t{table_idx}_row_{row_idx}_{row_label}"
+                        text_list.append({text_id: combined})
+            
+            if verbose:
+                print(f"✅ 总共提取了 {len(text_list)} 个文本项")
+        
+        except Exception as e:
+            print(f"❌ 提取失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        
+        return text_list
+    
+    
+    
+    
     retrieval = Retrieval(
-        # data_dir="/work/ai/community_agent/retrieval_data", 
-        # index_dir="/work/ai/community_agent/retrieval_storage", 
-        chunk_size=256, 
+        chunk_size=512, 
         chunk_overlap=20, 
         line_based_chunk=False
     )
-    # async def main():
-        # nodes = await retrieval.execute(text_list=text_list, retrieval_word='2025年9月1日时讯消息', top_k=3)
-
-        # print([node.text for node in nodes])
-    # asyncio.run(main())
-    # retrieval.add_text(
-    #     text="2025年7月20日 早上7点 物业门口早餐菜品有：豆腐脑、咸菜",
-    #     text_id="2"
-    # )
-    # retrieval.show_nodes()
-    # # retrieval.delete_text(
-    # #     text_id="1"
-    # # )
-    # retrieval.show_nodes()
-    async def main():
-        result = await retrieval.execute(text_list=[], retrieval_word="你们公司地址？")
-        print(result)
-    asyncio.run(main())
+    # text_list = load_evaluation_table_enhanced(docx_path="/work/ai/agent/retrieval_data/pinggu.docx")
+    text_list = load_evaluation_table_enhanced(docx_path="/work/ai/agent/retrieval_data/shunxikeji.docx")
+    print(text_list)
+    async def test_retrieval():
+        # 测试1：纯动态检索
+        print("=" * 50)
+        print("测试1：纯动态文本检索")
+        print("=" * 50)
+        result = await retrieval.execute(
+            text_list=text_list, 
+            # retrieval_word="B.1总计得分",
+            retrieval_word="走失风险评估分级得分",
+            top_k=3,
+            static_flag=0  # 不使用静态索引
+        )
+        
+        print(f"\n检索到 {len(result)} 个结果:")
+        for i, node in enumerate(result):
+            print(f"{i+1}. 分数: {node.score:.4f}")
+            print(f"   类型: {node.node.metadata.get('type', 'unknown')}")
+            print(f"   文本: {node.node.text[:100]}")
+            print()
+        
+    
+    asyncio.run(test_retrieval())
