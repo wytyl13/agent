@@ -64,7 +64,7 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
     ) -> None:
         super().__init__()
         self._init_param(sql_config_path, sql_config, model)
-    
+        self._sync_connection = None
     
     def _init_param(self, sql_config_path: Optional[str] = None, sql_config: Optional[SqlConfig] = None, model : Type[ModelType] = None):
         self.sql_config_path = sql_config_path
@@ -169,6 +169,58 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
                 raise e
     
     
+    @contextmanager
+    def get_sync_db_session(self):
+        """提供同步数据库会话的上下文管理器"""
+        if not hasattr(self, '_sync_connection') or self._sync_connection is None:
+            self._sync_connection = self.get_sync_sql_connection()
+        
+        session = self._sync_connection()
+        try:
+            yield session
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
+    
+    
+    def get_sync_sql_connection(self):
+        """创建同步数据库连接"""
+        try:
+            sql_info = self.sql_config
+            username = sql_info.username
+            database = sql_info.database
+            password = sql_info.password
+            host = sql_info.host
+            port = sql_info.port
+        except Exception as e:
+            raise ValueError(f"fail to init the sql connect information!\n{self.sql_config}") from e
+        
+        encoded_password = urllib.parse.quote_plus(password)
+        
+        # 根据数据库类型构建同步连接字符串
+        if self.database_type == "mysql":
+            # MySQL 同步驱动
+            database_url = f"mysql+pymysql://{username}:{encoded_password}@{host}:{port}/{database}"
+        elif self.database_type == "postgresql":
+            # PostgreSQL 同步驱动
+            database_url = f"postgresql+psycopg2://{username}:{encoded_password}@{host}:{port}/{database}"
+        
+        try:
+            # 创建同步引擎
+            sync_engine = create_engine(
+                database_url, 
+                pool_size=10, 
+                max_overflow=20,
+                pool_pre_ping=True
+            )
+            SessionLocal = sessionmaker(bind=sync_engine)
+            return SessionLocal
+        except Exception as e:
+            raise ValueError("fail to create the sync sql connector engine!") from e
+    
     async def add_record(self, data: Dict[str, Any]) -> int:
         """添加记录"""
         async with self.get_db_session() as session:
@@ -186,70 +238,47 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
     
     
     def add_record_sync(self, data: Dict[str, Any]) -> int:
-        """同步版本的添加记录方法 - 解决事件循环冲突"""
-        def run_in_new_loop():
-            """在新的事件循环中运行异步操作"""
+        """真正的同步添加记录方法"""
+        with self.get_sync_db_session() as session:
             try:
-                # 创建新的事件循环
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                try:
-                    # 运行异步方法
-                    result = loop.run_until_complete(self.add_record(data))
-                    return result
-                finally:
-                    # 清理事件循环
-                    loop.close()
-                    
+                record = self.model(**data)
+                session.add(record)
+                session.flush()  # 刷新以获取ID
+                record_id = record.id
+                return record_id
             except Exception as e:
                 error_info = f"Failed to add record sync: {e}"
                 self.logger.error(error_info)
                 raise ValueError(error_info) from e
-        
-        # 检查当前是否在事件循环中
-        try:
-            # 如果已经在事件循环中，在新线程中运行
-            asyncio.get_running_loop()
-            
-            # 在新线程中运行，避免嵌套事件循环
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(run_in_new_loop)
-                return future.result()
-                
-        except RuntimeError:
-            # 没有运行的事件循环，直接运行
-            return run_in_new_loop()
 
-    def bulk_insert_sync(self, data_list: List[Dict[str, Any]]) -> int:
-        """同步版本的批量插入方法"""
-        def run_in_new_loop():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+    # def bulk_insert_sync(self, data_list: List[Dict[str, Any]]) -> int:
+    #     """同步版本的批量插入方法"""
+    #     def run_in_new_loop():
+    #         try:
+    #             loop = asyncio.new_event_loop()
+    #             asyncio.set_event_loop(loop)
                 
-                try:
-                    result = loop.run_until_complete(self.bulk_insert_with_update(data_list))
-                    return result
-                finally:
-                    loop.close()
+    #             try:
+    #                 result = loop.run_until_complete(self.bulk_insert_with_update(data_list))
+    #                 return result
+    #             finally:
+    #                 loop.close()
                     
-            except Exception as e:
-                error_info = f"Failed to bulk insert sync: {e}"
-                self.logger.error(error_info)
-                raise ValueError(error_info) from e
+    #         except Exception as e:
+    #             error_info = f"Failed to bulk insert sync: {e}"
+    #             self.logger.error(error_info)
+    #             raise ValueError(error_info) from e
         
-        try:
-            asyncio.get_running_loop()
+    #     try:
+    #         asyncio.get_running_loop()
             
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(run_in_new_loop)
-                return future.result()
+    #         import concurrent.futures
+    #         with concurrent.futures.ThreadPoolExecutor() as executor:
+    #             future = executor.submit(run_in_new_loop)
+    #             return future.result()
                 
-        except RuntimeError:
-            return run_in_new_loop()
+    #     except RuntimeError:
+    #         return run_in_new_loop()
     
     
     
