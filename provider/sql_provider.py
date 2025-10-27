@@ -35,7 +35,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from contextlib import asynccontextmanager
 import asyncio
-
+import threading
+import asyncio
+        
 from ..provider.base_provider import BaseProvider
 from ..config.sql_config import SqlConfig
 
@@ -181,6 +183,74 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
                 self.logger.error(error_info)
                 self.logger.error(traceback.print_exc())
                 raise ValueError(error_info) from e
+    
+    
+    def add_record_sync(self, data: Dict[str, Any]) -> int:
+        """同步版本的添加记录方法 - 解决事件循环冲突"""
+        def run_in_new_loop():
+            """在新的事件循环中运行异步操作"""
+            try:
+                # 创建新的事件循环
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                try:
+                    # 运行异步方法
+                    result = loop.run_until_complete(self.add_record(data))
+                    return result
+                finally:
+                    # 清理事件循环
+                    loop.close()
+                    
+            except Exception as e:
+                error_info = f"Failed to add record sync: {e}"
+                self.logger.error(error_info)
+                raise ValueError(error_info) from e
+        
+        # 检查当前是否在事件循环中
+        try:
+            # 如果已经在事件循环中，在新线程中运行
+            asyncio.get_running_loop()
+            
+            # 在新线程中运行，避免嵌套事件循环
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_in_new_loop)
+                return future.result()
+                
+        except RuntimeError:
+            # 没有运行的事件循环，直接运行
+            return run_in_new_loop()
+
+    def bulk_insert_sync(self, data_list: List[Dict[str, Any]]) -> int:
+        """同步版本的批量插入方法"""
+        def run_in_new_loop():
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                try:
+                    result = loop.run_until_complete(self.bulk_insert_with_update(data_list))
+                    return result
+                finally:
+                    loop.close()
+                    
+            except Exception as e:
+                error_info = f"Failed to bulk insert sync: {e}"
+                self.logger.error(error_info)
+                raise ValueError(error_info) from e
+        
+        try:
+            asyncio.get_running_loop()
+            
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_in_new_loop)
+                return future.result()
+                
+        except RuntimeError:
+            return run_in_new_loop()
+    
     
     
     async def bulk_insert_with_update(self, data_list: List[Dict[str, Any]]) -> int:
