@@ -31,5 +31,13 @@ jieba
 psutil
 rich
 modelscope
-torchaudio>=2.6.0
+
+# torch
+torch==2.1.0
+torchvision==0.16.0
+torchaudio==2.1.0
+transformers==4.35.0
+sentence-transformers==2.2.2
+
+
 dotenv
