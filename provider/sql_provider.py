@@ -870,6 +870,102 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
                 self.logger.error(error_info)
                 raise ValueError(f"{error_info}") from e
 
+    async def get_records_paginated(
+        self, 
+        page: int, 
+        page_size: int,
+        condition: Optional[Dict[str, Any]] = None,
+        fields: Optional[List[str]] = None,
+        exclude_fields: Optional[List[str]] = None,
+        date_range: Optional[Dict[str, str]] = None
+    ) -> Dict[str, Any]:
+        """
+        [新增] 专用的分页查询方法
+        返回: {'items': [...], 'total': 100, 'page': 1, 'size': 10}
+        """
+        async with self.get_db_session() as session:
+            try:
+                # 1. 复用之前的逻辑构建 stmt (建议将构建逻辑提取为私有方法 _build_stmt，这里为了方便直接复制核心逻辑)
+                # -------------------------------------------------------------------------
+                all_fields = [column.key for column in self.model.__table__.columns]
+                if fields:
+                    query_fields = fields
+                else:
+                    query_fields = all_fields
+                if exclude_fields:
+                    query_fields = [f for f in query_fields if f not in exclude_fields]
+
+                # 构建 Select 语句
+                if len(query_fields) == len(all_fields):
+                    stmt = select(self.model)
+                else:
+                    stmt = select(*[getattr(self.model, field) for field in query_fields])
+
+                # 应用条件
+                if condition:
+                    for key, value in condition.items():
+                        if key == 'deleted' and isinstance(value, bool):
+                            value = 1 if value else 0
+                        
+                        if isinstance(value, dict) and ('min' in value or 'max' in value):
+                            field_attr = getattr(self.model, key)
+                            if 'min' in value: stmt = stmt.where(field_attr >= value['min'])
+                            if 'max' in value: stmt = stmt.where(field_attr <= value['max'])
+                        elif isinstance(value, (list, tuple)):
+                            stmt = stmt.where(getattr(self.model, key).in_(value))
+                        else:
+                            stmt = stmt.where(getattr(self.model, key) == value)
+                
+                # 应用时间范围
+                if date_range:
+                    # ... (这里保留你原本的时间范围逻辑) ...
+                    pass
+                
+                # -------------------------------------------------------------------------
+
+                # 2. [核心] 计算总数 (Total Count)
+                # 使用 subquery 保证统计的是过滤后的数量
+                count_stmt = select(func.count()).select_from(stmt.subquery())
+                total_result = await session.execute(count_stmt)
+                total = total_result.scalar()
+
+                # 3. [核心] 应用分页 (Limit / Offset)
+                offset = (page - 1) * page_size
+                # 加上排序，防止分页数据乱序 (建议按 ID 或创建时间倒序)
+                if hasattr(self.model, 'create_time'):
+                    stmt = stmt.order_by(self.model.create_time.desc())
+                elif hasattr(self.model, 'id'):
+                    stmt = stmt.order_by(self.model.id.desc())
+                    
+                stmt = stmt.offset(offset).limit(page_size)
+
+                # 4. 执行查询
+                result = await session.execute(stmt)
+                records = result.fetchall()
+
+                # 5. 格式化数据
+                data_list = []
+                if len(query_fields) == len(all_fields):
+                     data_list = [
+                        {key: value for key, value in record[0].__dict__.items() 
+                         if key != '_sa_instance_state'}
+                        for record in records
+                    ]
+                else:
+                    data_list = [dict(zip(query_fields, record)) for record in records]
+
+                # 6. 返回分页结构
+                return {
+                    "items": data_list,
+                    "total": total,
+                    "page": page,
+                    "size": page_size
+                }
+                    
+            except Exception as e:
+                self.logger.error(f"分页查询异常: {str(e)}")
+                raise e
+    
 
     def _parse_datetime_unified(self, datetime_str: str, is_end_date: bool = False) -> datetime:
         """
