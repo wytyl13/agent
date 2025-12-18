@@ -22,7 +22,7 @@ from typing import (
     Type,
     List
 )
-from sqlalchemy import create_engine, text, select
+from sqlalchemy import create_engine, text, select, func
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from sqlalchemy.ext.declarative import declarative_base
 import numpy as np
