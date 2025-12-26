@@ -23,7 +23,7 @@ from typing import (
     List
 )
 from sqlalchemy import create_engine, text, select, func
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import sessionmaker, DeclarativeBase, selectinload
 from sqlalchemy.ext.declarative import declarative_base
 import numpy as np
 from contextlib import contextmanager
@@ -407,6 +407,34 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
             return 0
     
     
+    async def batch_create(self, data_list: List[Dict[str, Any]]) -> int:
+        """
+        [新增] 高性能纯批量插入 (Pure Batch Insert)
+        特点：一次网络交互写入所有数据，速度最快。
+        注意：如果有主键冲突会报错，适合全新数据的导入。
+        """
+        if not data_list:
+            return 0
+            
+        # 引入 SQLAlchemy 的 insert 对象
+        from sqlalchemy import insert
+        
+        async with self.get_db_session() as session:
+            try:
+                # 核心黑魔法：直接把 list 传给 execute，SQLAlchemy 会自动优化为 batch 操作
+                # 注意：这里不需要写 raw sql，直接用 ORM 模型
+                stmt = insert(self.model)
+                
+                result = await session.execute(stmt, data_list)
+                await session.commit()
+                
+                return len(data_list)
+            except Exception as e:
+                await session.rollback()
+                self.logger.error(f"批量插入失败: {e}")
+                raise e
+    
+    
     async def delete_record(self, record_id: int, hard_delete: bool = False) -> bool:
         """软删除记录"""
         async with self.get_db_session() as session:
@@ -444,10 +472,7 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
         """更新记录"""
         async with self.get_db_session() as session:
             try:
-                stmt = select(self.model).where(
-                    self.model.id == record_id,
-                    self.model.deleted == False
-                )
+                stmt = select(self.model).where(self.model.id == record_id)
                 result = await session.execute(stmt)
                 record = result.scalar_one_or_none()
                 if record:
@@ -456,11 +481,12 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
                             setattr(record, key, value)
                     await session.commit()
                     return True
+                self.logger.warning(f"更新失败: 未找到ID为 {record_id} 的记录")
                 return False
             except Exception as e:
-                error_info = f"Failed to update record {record_id} with data: {data}"
-                self.logger.error(error_info)
-                raise ValueError(error_info) from e
+                error_msg = traceback.format_exc()
+                self.logger.error(f"Failed to update record {record_id}.\nData: {data}\nError: {error_msg}")
+                raise e
 
 
     async def update_record_enhanced(self, record_id: int, data: Dict[str, Any], return_updated: bool = True) -> Optional[Dict[str, Any]]:
@@ -870,11 +896,13 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
                 self.logger.error(error_info)
                 raise ValueError(f"{error_info}") from e
 
+
     async def get_records_paginated(
         self, 
         page: int, 
         page_size: int,
-        condition: Optional[Dict[str, Any]] = None,
+        condition: Optional[Dict[str, Any]] = None, # 用于简单 K=V 查询
+        filters: Optional[List[Any]] = None,        # 用于接收复杂的 SQLAlchemy 表达式
         fields: Optional[List[str]] = None,
         exclude_fields: Optional[List[str]] = None,
         date_range: Optional[Dict[str, str]] = None
@@ -915,6 +943,11 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
                             stmt = stmt.where(getattr(self.model, key).in_(value))
                         else:
                             stmt = stmt.where(getattr(self.model, key) == value)
+                
+                # 应用复杂的 SQLAlchemy 表达式 (filters)
+                if filters:
+                    for expr in filters:
+                        stmt = stmt.where(expr)
                 
                 # 应用时间范围
                 if date_range:
@@ -966,7 +999,63 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
                 self.logger.error(f"分页查询异常: {str(e)}")
                 raise e
     
-
+    
+    async def get_with_relations(
+        self, 
+        record_id: int, 
+        relations: List[str]
+    ) -> Optional[ModelType]:
+        """
+        [修改版] 查询并返回"游离态"对象，解决 Session 关闭后的访问报错问题
+        """
+        async with self.get_db_session() as session:
+            try:
+                # 1. 基础查询
+                # 注意：如果你之前报错 'no attribute deleted'，请确保这里注释掉了 deleted 检查，或者 Model 里加了字段
+                stmt = select(self.model).where(self.model.id == record_id)
+                
+                # 2. 动态添加加载选项 (Eager Loading)
+                for relation_name in relations:
+                    if hasattr(self.model, relation_name):
+                        stmt = stmt.options(selectinload(getattr(self.model, relation_name)))
+                
+                # 3. 执行查询
+                result = await session.execute(stmt)
+                record = result.scalar_one_or_none()
+                
+                # === [核心修改] 剥离对象 (Expunge) ===
+                if record:
+                    # 这句话的意思是：切断 record 与 session 的脐带。
+                    # 此时 record 变成了一个普通的 Python 对象，数据都在内存里。
+                    # 即使 session 关闭了，你依然可以随意访问 doc.bucket_name, doc.cover 等属性。
+                    session.expunge(record)
+                
+                return record
+                
+            except Exception as e:
+                self.logger.error(f"Failed to get record with relations: {str(e)}")
+                raise e
+    
+    
+    async def get_group_counts(self, group_by_field: str) -> dict:
+        """
+        统计某个字段的分组数量
+        返回示例: {0: 5, 100: 3, -1: 1}  (状态码: 数量)
+        """
+        async with self.get_db_session() as session:
+            try:
+                # 相当于: SELECT status, COUNT(*) FROM table GROUP BY status
+                stmt = select(getattr(self.model, group_by_field), func.count())\
+                       .group_by(getattr(self.model, group_by_field))
+                
+                result = await session.execute(stmt)
+                # 将结果转换为字典
+                return dict(result.fetchall())
+            except Exception as e:
+                self.logger.error(f"分组统计失败: {str(e)}")
+                raise e
+    
+        
     def _parse_datetime_unified(self, datetime_str: str, is_end_date: bool = False) -> datetime:
         """
         统一的日期时间解析方法，支持多种格式
