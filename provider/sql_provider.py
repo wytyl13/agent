@@ -905,7 +905,8 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
         filters: Optional[List[Any]] = None,        # 用于接收复杂的 SQLAlchemy 表达式
         fields: Optional[List[str]] = None,
         exclude_fields: Optional[List[str]] = None,
-        date_range: Optional[Dict[str, str]] = None
+        date_range: Optional[Dict[str, str]] = None,
+        order_by: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         [新增] 专用的分页查询方法
@@ -965,9 +966,15 @@ class SqlProvider(BaseProvider, Generic[ModelType]):
                 # 3. [核心] 应用分页 (Limit / Offset)
                 offset = (page - 1) * page_size
                 # 加上排序，防止分页数据乱序 (建议按 ID 或创建时间倒序)
-                if hasattr(self.model, 'create_time'):
+                # --- [修改] 排序逻辑 ---
+                if order_by is not None:
+                    # 如果传入了自定义排序，直接使用
+                    stmt = stmt.order_by(order_by)
+                elif hasattr(self.model, 'create_time'):
+                    # 默认逻辑
                     stmt = stmt.order_by(self.model.create_time.desc())
                 elif hasattr(self.model, 'id'):
+                    # 默认逻辑
                     stmt = stmt.order_by(self.model.id.desc())
                     
                 stmt = stmt.offset(offset).limit(page_size)
